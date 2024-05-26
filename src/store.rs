@@ -6,15 +6,19 @@ use slotmap::{new_key_type, SlotMap};
 use state::TypeMap;
 use tokio::{select, spawn};
 use tokio_util::sync::CancellationToken;
-use crate::signal::Mutable;
+use crate::observable::Observable;
+use crate::signal::{Mutable, ReadOnlyMutable};
+use crate::signal::SignalExt;
 
 new_key_type! {
     pub struct SpawnedFutKey;
 }
 
+pub(crate) type StoreRef = Arc<Mutex<RxStore>>;
+
 /// Controls access to internal store by controlling
 /// access to mutex lock
-pub struct RxStoreManager(Arc<Mutex<RxStore>>);
+pub struct RxStoreManager(StoreRef);
 
 impl RxStoreManager {
 
@@ -72,9 +76,37 @@ impl RxStoreManager {
     }
 
     pub fn create_mutable<T: 'static>(&self, v: T) -> Mutable<T> {
-        Mutable::new(v, self.0.clone())
+        Mutable::new(v)
+    }
+
+    pub fn observe_mutable<U, A, F>(
+        &self,
+        in_mutable: Mutable<A>,
+        f: F
+    ) -> Observable<U>
+        where
+            A: Clone + Send + Sync + 'static,
+            U: Default + Send + Sync + 'static,
+            F: Fn(ReadOnlyMutable<A>) -> U + Send + Sync + 'static
+    {
+        let out_mutable = self.create_mutable(U::default());
+        let out_mutable_clone = out_mutable.clone();
+        let in_mutable_clone = in_mutable.clone();
+        let fut = in_mutable.signal_cloned().for_each(move |_| {
+            out_mutable_clone.set(f(in_mutable_clone.read_only()));
+            async {  }
+        });
+
+        let mut lock = self.get_store();
+        let fut_key = lock.spawn_fut(None, fut);
+        Observable {
+            mutable: out_mutable,
+            fut_key
+        }
     }
 }
+
+
 
 pub struct RxStore {
     stored: TypeMap![Send + Sync],
@@ -90,9 +122,9 @@ impl RxStore {
         }
     }
 
-    pub(crate) fn create_mutable<T: 'static>(&self, v: T, store_ref: Arc<Mutex<RxStore>>) -> Mutable<T> {
-        Mutable::new(v, store_ref)
-    }
+    // pub(crate) fn create_mutable<T: 'static>(&self, v: T) -> Mutable<T> {
+    //     Mutable::new(v)
+    // }
 
     pub fn set<T: Send + Sync + 'static>(&self, v: T) -> bool {
         self.stored.set(v)
@@ -134,5 +166,38 @@ impl RxStore {
     pub(crate) fn clean_up(&mut self, s: SpawnedFutKey) {
         if let Some(v) = self.spawned_futs.get(s) { v.cancel() }
         self.spawned_futs.remove(s);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::store::{RxStore, RxStoreManager};
+
+    #[test]
+    fn it_gets_parking_lot_lock() {
+        let store = RxStoreManager::new();
+        assert!(store.try_get_store().is_some())
+    }
+
+    #[test]
+    fn it_returns_none_when_locked() {
+        let store = RxStoreManager::new();
+        // Holding lock
+        let _lock = store.get_store();
+        // None because lock not available
+        assert!(store.try_get_store().is_none())
+    }
+
+
+    #[derive(PartialEq, Debug, Copy, Clone)]
+    struct TestTypeOne(i32);
+
+    #[test]
+    fn it_gets_type() {
+        let s = RxStore::new();
+        let one_a = TestTypeOne(50);
+        s.set(one_a);
+        let one_b = s.get::<TestTypeOne>();
+        assert_eq!(one_a, *one_b)
     }
 }
