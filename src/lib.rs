@@ -24,6 +24,8 @@ pub mod signal_map;
 
 mod atomic;
 mod future;
+mod store;
+
 pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFuture};
 
 
