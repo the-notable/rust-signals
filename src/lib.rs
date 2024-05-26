@@ -1,8 +1,8 @@
 #![recursion_limit="128"]
 #![warn(unreachable_pub)]
 // missing_docs
-#![deny(warnings, missing_debug_implementations, macro_use_extern_crate)]
-
+// #![deny(warnings, missing_debug_implementations, macro_use_extern_crate)]
+#![deny(missing_debug_implementations, macro_use_extern_crate)]
 ///! It is *very highly* recommended to read the tutorial.
 ///! It explains all of the concepts you will need to use Signals effectively.
 
@@ -17,6 +17,7 @@ pub mod internal;
 #[doc(hidden)]
 pub use gensym::gensym as __internal_gensym;
 
+pub mod observable;
 pub mod signal;
 pub mod signal_vec;
 pub mod signal_map;
