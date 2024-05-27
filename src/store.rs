@@ -135,58 +135,6 @@ impl RxStoreManager {
             fut_key
         }
     }
-
-    // pub fn observe_mutable<U, A, F>(
-    //     &self,
-    //     in_mutable: Mutable<A>,
-    //     f: F
-    // ) -> Observable<U>
-    //     where
-    //         A: Copy + Send + Sync + 'static,
-    //         U: Default + Send + Sync + 'static,
-    //         F: Fn(A) -> U + Send + Sync + 'static
-    // {
-    //     let out_mutable = self.create_mutable(U::default());
-    //     let out_mutable_clone = out_mutable.clone();
-    //     let fut = in_mutable.signal().for_each(move |v| {
-    //         out_mutable_clone.set(f(v));
-    //         async {  }
-    //     });
-    //
-    //     let mut lock = self.get_store();
-    //     let fut_key = lock.spawn_fut(None, fut);
-    //     Observable {
-    //         mutable: out_mutable,
-    //         fut_key
-    //     }
-    // }
-
-    // pub fn observe_mutable_cloned<U, A, F>(
-    //     &self,
-    //     in_mutable: Mutable<A>,
-    //     f: F
-    // ) -> Observable<U>
-    //     where
-    //         A: Clone + Send + Sync + 'static,
-    //         U: Default + Send + Sync + 'static,
-    //         F: Fn(A) -> U + Send + Sync + 'static
-    // {
-    //     let out_mutable = self.create_mutable(U::default());
-    //     let out_mutable_clone = out_mutable.clone();
-    //     //let in_mutable_clone = in_mutable.clone();
-    //     let fut = in_mutable.signal_cloned().for_each(move |v| {
-    //         println!("why no run");
-    //         out_mutable_clone.set(f(v));
-    //         async {  }
-    //     });
-    //
-    //     let mut lock = self.get_store();
-    //     let fut_key = lock.spawn_fut(None, fut);
-    //     Observable {
-    //         mutable: out_mutable,
-    //         fut_key
-    //     }
-    // }
 }
 
 
