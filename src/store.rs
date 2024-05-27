@@ -305,25 +305,12 @@ mod tests {
         assert_eq!(mutable.get(), 50)
     }
 
-    // #[tokio::test]
-    // async fn it_observes_mutable() {
-    //     let store = RxStoreManager::new();
-    //     let mutable = store.create_mutable(50);
-    //     let mutable_clone = mutable.clone();
-    //     let observable = store.observe_mutable(mutable_clone, |in_mutable| in_mutable + 20 );
-    //     mutable.set(100);
-    //
-    //     tokio::time::sleep(Duration::from_millis(500)).await;
-    //
-    //     assert_eq!(observable.get(), 120)
-    // }
-
     #[tokio::test]
-    async fn it_derives_observable() {
+    async fn it_derives_observable_from_mutable() {
         let store = RxStoreManager::new();
         let mutable = store.create_mutable(50);
         let mutable_clone = mutable.clone();
-        let observable = store.derive_observable(&*mutable_clone, |in_mutable| in_mutable + 20 );
+        let observable = store.derive_observable(&*mutable_clone, |source| source + 20 );
         mutable.set(100);
 
         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -332,17 +319,49 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_derives_observable_cloned() {
+    async fn it_derives_observable_cloned_from_mutable() {
         let store = RxStoreManager::new();
         let mutable = store.create_mutable("hello".to_string());
         let mutable_clone = mutable.clone();
-        let observable = store.derive_observable_cloned(&*mutable_clone, |in_mutable| {
-            format!("{} there", in_mutable)
+        let observable = store.derive_observable_cloned(&*mutable_clone, |source| {
+            format!("{}, general kenobi", source)
         });
-        mutable.set("hi".to_string());
+        mutable.set(format!("{} there", mutable.get_cloned()));
 
         tokio::time::sleep(Duration::from_millis(500)).await;
 
-        assert_eq!(observable.get_cloned(), "hi there".to_string())
+        assert_eq!(observable.get_cloned(), "hello there, general kenobi".to_string())
+    }
+
+    #[tokio::test]
+    async fn it_derives_observable_from_observable() {
+        let store = RxStoreManager::new();
+        let mutable = store.create_mutable(50);
+        let mutable_clone = mutable.clone();
+        let observable_one = store.derive_observable(&*mutable_clone, |source| source + 20);
+        let observable_two = store.derive_observable(&observable_one, |source| source + 30);
+        mutable.set(100);
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        assert_eq!(observable_two.get(), 150)
+    }
+
+    #[tokio::test]
+    async fn it_derives_observable_cloned_from_observable() {
+        let store = RxStoreManager::new();
+        let mutable = store.create_mutable("hello".to_string());
+        let mutable_clone = mutable.clone();
+        let observable_one = store.derive_observable_cloned(&*mutable_clone, |source| {
+            format!("{}, general kenobi", source)
+        });
+        let observable_two = store.derive_observable_cloned(&observable_one, |source| {
+            format!("{}, nice to see you", source)
+        });
+        mutable.set(format!("{} there", mutable.get_cloned()));
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        assert_eq!(observable_two.get_cloned(), "hello there, general kenobi, nice to see you".to_string())
     }
 }
