@@ -9,6 +9,7 @@ use std::sync::{Arc, Weak, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 // TODO use parking_lot ?
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::task::{Poll, Waker, Context};
+use crate::traits::{HasSignal, HasSignalCloned};
 
 
 #[derive(Debug)]
@@ -199,9 +200,13 @@ impl<A: Copy> ReadOnlyMutable<A> {
     pub fn get(&self) -> A {
         self.0.lock.read().unwrap().value
     }
+}
+
+impl<A: Copy> HasSignal<A> for ReadOnlyMutable<A> {
+    type Return = MutableSignal<A>;
 
     #[inline]
-    pub fn signal(&self) -> MutableSignal<A> {
+    fn signal(&self) -> Self::Return {
         MutableSignal(self.signal_state())
     }
 }
@@ -211,9 +216,13 @@ impl<A: Clone> ReadOnlyMutable<A> {
     pub fn get_cloned(&self) -> A {
         self.0.lock.read().unwrap().value.clone()
     }
+}
+
+impl<A: Clone> HasSignalCloned<A> for ReadOnlyMutable<A> {
+    type Return = MutableSignalCloned<A>;
 
     #[inline]
-    pub fn signal_cloned(&self) -> MutableSignalCloned<A> {
+    fn signal_cloned(&self) -> Self::Return {
         MutableSignalCloned(self.signal_state())
     }
 }
@@ -457,5 +466,18 @@ impl<A: Clone> Signal for MutableSignalCloned<A> {
     // TODO code duplication with MutableSignal::poll
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         self.0.poll_change(cx, |value| value.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::signal::Mutable;
+
+    #[test]
+    fn it_clones() {
+        let mutable = Mutable::new(50);
+        let mutable_clone = mutable.clone();
+        mutable.set(100);
+        assert_eq!(mutable_clone.get(), 100)
     }
 }

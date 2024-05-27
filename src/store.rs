@@ -1,14 +1,17 @@
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
+
 use parking_lot::{ArcMutexGuard, Mutex, RawMutex};
 use slotmap::{new_key_type, SlotMap};
 use state::TypeMap;
 use tokio::{select, spawn};
 use tokio_util::sync::CancellationToken;
+
 use crate::observable::Observable;
-use crate::signal::{Mutable, ReadOnlyMutable};
+use crate::signal::Mutable;
 use crate::signal::SignalExt;
+use crate::traits::{HasSignal, HasSignalCloned};
 
 new_key_type! {
     pub struct SpawnedFutKey;
@@ -79,32 +82,113 @@ impl RxStoreManager {
         Mutable::new(v)
     }
 
-    pub fn observe_mutable<U, A, F>(
+    pub fn derive_observable<U, A, S, F>(
         &self,
-        in_mutable: Mutable<A>,
+        source: &S,
         f: F
     ) -> Observable<U>
         where
-            A: Clone + Send + Sync + 'static,
+            A: Copy + Send + Sync + 'static,
             U: Default + Send + Sync + 'static,
-            F: Fn(ReadOnlyMutable<A>) -> U + Send + Sync + 'static
+            S: Clone + HasSignal<A> + Send + Sync + 'static,
+            <S as HasSignal<A>>::Return: crate::signal::Signal + Send + Sync + 'static,
+            F: Fn(<<S as HasSignal<A>>::Return as crate::signal::Signal>::Item) -> U + Send + Sync + 'static
     {
-        let out_mutable = self.create_mutable(U::default());
-        let out_mutable_clone = out_mutable.clone();
-        let in_mutable_clone = in_mutable.clone();
-        let fut = in_mutable.signal_cloned().for_each(move |_| {
-            out_mutable_clone.set(f(in_mutable_clone.read_only()));
+        let out = self.create_mutable(U::default());
+        let out_mutable_clone = out.clone();
+        let fut = source.signal().for_each(move |v| {
+            out_mutable_clone.set(f(v));
             async {  }
         });
 
         let mut lock = self.get_store();
         let fut_key = lock.spawn_fut(None, fut);
         Observable {
-            mutable: out_mutable,
+            mutable: out,
             fut_key
         }
     }
+
+    pub fn derive_observable_cloned<U, A, S, F>(
+        &self,
+        source: &S,
+        f: F
+    ) -> Observable<U>
+        where
+            A: Clone + Send + Sync + 'static,
+            U: Default + Send + Sync + 'static,
+            S: Clone + HasSignalCloned<A> + Send + Sync + 'static,
+            <S as HasSignalCloned<A>>::Return: crate::signal::Signal + Send + Sync + 'static,
+            F: Fn(<<S as HasSignalCloned<A>>::Return as crate::signal::Signal>::Item) -> U + Send + Sync + 'static
+    {
+        let out = self.create_mutable(U::default());
+        let out_mutable_clone = out.clone();
+        let fut = source.signal_cloned().for_each(move |v| {
+            out_mutable_clone.set(f(v));
+            async {  }
+        });
+
+        let mut lock = self.get_store();
+        let fut_key = lock.spawn_fut(None, fut);
+        Observable {
+            mutable: out,
+            fut_key
+        }
+    }
+
+    // pub fn observe_mutable<U, A, F>(
+    //     &self,
+    //     in_mutable: Mutable<A>,
+    //     f: F
+    // ) -> Observable<U>
+    //     where
+    //         A: Copy + Send + Sync + 'static,
+    //         U: Default + Send + Sync + 'static,
+    //         F: Fn(A) -> U + Send + Sync + 'static
+    // {
+    //     let out_mutable = self.create_mutable(U::default());
+    //     let out_mutable_clone = out_mutable.clone();
+    //     let fut = in_mutable.signal().for_each(move |v| {
+    //         out_mutable_clone.set(f(v));
+    //         async {  }
+    //     });
+    //
+    //     let mut lock = self.get_store();
+    //     let fut_key = lock.spawn_fut(None, fut);
+    //     Observable {
+    //         mutable: out_mutable,
+    //         fut_key
+    //     }
+    // }
+
+    // pub fn observe_mutable_cloned<U, A, F>(
+    //     &self,
+    //     in_mutable: Mutable<A>,
+    //     f: F
+    // ) -> Observable<U>
+    //     where
+    //         A: Clone + Send + Sync + 'static,
+    //         U: Default + Send + Sync + 'static,
+    //         F: Fn(A) -> U + Send + Sync + 'static
+    // {
+    //     let out_mutable = self.create_mutable(U::default());
+    //     let out_mutable_clone = out_mutable.clone();
+    //     //let in_mutable_clone = in_mutable.clone();
+    //     let fut = in_mutable.signal_cloned().for_each(move |v| {
+    //         println!("why no run");
+    //         out_mutable_clone.set(f(v));
+    //         async {  }
+    //     });
+    //
+    //     let mut lock = self.get_store();
+    //     let fut_key = lock.spawn_fut(None, fut);
+    //     Observable {
+    //         mutable: out_mutable,
+    //         fut_key
+    //     }
+    // }
 }
+
 
 
 
@@ -153,12 +237,13 @@ impl RxStore {
         };
 
         let cloned_token = token.clone();
-        spawn(async move {
+        let h = spawn(async move {
             select! {
                 _ = cloned_token.cancelled() => {}
                 _ = f => {}
             }
         });
+
         let key = self.spawned_futs.insert(token);
         key
     }
@@ -171,6 +256,8 @@ impl RxStore {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use crate::store::{RxStore, RxStoreManager};
 
     #[test]
@@ -188,6 +275,16 @@ mod tests {
         assert!(store.try_get_store().is_none())
     }
 
+    #[test]
+    fn it_returns_none_until_timeout() {
+        let store = RxStoreManager::new();
+        let duration = Duration::from_millis(1000);
+        {
+            let lock = store.get_store();
+            assert!(store.try_get_store_timeout(duration).is_none());
+        }
+        assert!(store.try_get_store_timeout(duration).is_some())
+    }
 
     #[derive(PartialEq, Debug, Copy, Clone)]
     struct TestTypeOne(i32);
@@ -199,5 +296,53 @@ mod tests {
         s.set(one_a);
         let one_b = s.get::<TestTypeOne>();
         assert_eq!(one_a, *one_b)
+    }
+
+    #[test]
+    fn it_creates_mutable() {
+        let store = RxStoreManager::new();
+        let mutable = store.create_mutable(50);
+        assert_eq!(mutable.get(), 50)
+    }
+
+    // #[tokio::test]
+    // async fn it_observes_mutable() {
+    //     let store = RxStoreManager::new();
+    //     let mutable = store.create_mutable(50);
+    //     let mutable_clone = mutable.clone();
+    //     let observable = store.observe_mutable(mutable_clone, |in_mutable| in_mutable + 20 );
+    //     mutable.set(100);
+    //
+    //     tokio::time::sleep(Duration::from_millis(500)).await;
+    //
+    //     assert_eq!(observable.get(), 120)
+    // }
+
+    #[tokio::test]
+    async fn it_derives_observable() {
+        let store = RxStoreManager::new();
+        let mutable = store.create_mutable(50);
+        let mutable_clone = mutable.clone();
+        let observable = store.derive_observable(&*mutable_clone, |in_mutable| in_mutable + 20 );
+        mutable.set(100);
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        assert_eq!(observable.get(), 120)
+    }
+
+    #[tokio::test]
+    async fn it_derives_observable_cloned() {
+        let store = RxStoreManager::new();
+        let mutable = store.create_mutable("hello".to_string());
+        let mutable_clone = mutable.clone();
+        let observable = store.derive_observable_cloned(&*mutable_clone, |in_mutable| {
+            format!("{} there", in_mutable)
+        });
+        mutable.set("hi".to_string());
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        assert_eq!(observable.get_cloned(), "hi there".to_string())
     }
 }

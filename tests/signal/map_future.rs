@@ -3,6 +3,7 @@ use std::cell::Cell;
 use std::task::Poll;
 use futures_signals::signal::{SignalExt, Mutable};
 use futures_util::future::poll_fn;
+use futures_signals::traits::HasSignal;
 use crate::util;
 
 

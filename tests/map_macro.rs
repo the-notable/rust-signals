@@ -12,6 +12,7 @@ macro_rules! map_tests {
             use std::task::Poll;
             use futures_signals::$name;
             use futures_signals::signal::{SignalExt, always};
+            use futures_signals::traits::HasSignal;
 
             #[test]
             fn send_sync() {

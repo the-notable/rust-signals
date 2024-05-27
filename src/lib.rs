@@ -25,6 +25,7 @@ pub mod signal_map;
 mod atomic;
 mod future;
 mod store;
+pub mod traits;
 
 pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFuture};
 
@@ -178,6 +179,7 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 ///
 /// ```rust
 /// # use futures_signals::signal::Mutable;
+/// # use futures_signals::traits::HasSignal;
 /// # let my_state = Mutable::new(10);
 /// #
 /// let signal1 = my_state.signal();
