@@ -143,6 +143,7 @@ impl RxStoreManager {
 //     Cancelled(T)
 // }
 
+#[derive(Debug)]
 pub struct RxStore {
     stored: TypeMap![Send + Sync],
     spawned_futs: SlotMap<SpawnedFutKey, CancellationToken>
