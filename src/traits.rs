@@ -1,4 +1,5 @@
-use crate::signal::Signal;
+pub trait SSS: Send + Sync + 'static {}
+impl<T: Send + Sync + 'static> SSS for T {}
 
 pub trait Get<T: Copy> {
     fn get(&self) -> T;

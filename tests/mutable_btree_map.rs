@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::task::Poll;
-use futures_signals::signal_map::{MapDiff, MutableBTreeMap, MutableBTreeMapLockMut};
+use futures_signals::signal_map::{HasSignalMap, HasSignalMapCloned, MapDiff, MutableBTreeMap, MutableBTreeMapLockMut};
 
 mod util;
 

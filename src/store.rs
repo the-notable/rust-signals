@@ -11,21 +11,22 @@ use tokio_util::sync::CancellationToken;
 use crate::observable::Observable;
 use crate::signal::Mutable;
 use crate::signal::SignalExt;
-use crate::traits::{HasSignal, HasSignalCloned};
+use crate::traits::{HasSignal, HasSignalCloned, SSS};
 
 new_key_type! {
     pub struct SpawnedFutKey;
 }
 
-pub(crate) type StoreRef = Arc<Mutex<RxStore>>;
+pub(crate) type StorePtr = Arc<Mutex<RxStore>>;
+pub(crate) type StoreArcMutexGuard = ArcMutexGuard<RawMutex, RxStore>;
 
 /// Controls access to internal store by controlling
 /// access to mutex lock
-pub struct RxStoreManager(StoreRef);
+pub struct RxStoreManager(StorePtr);
 
 impl RxStoreManager {
 
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(Arc::new(Mutex::new(RxStore::new())))
     }
 
@@ -41,11 +42,11 @@ impl RxStoreManager {
     ///
     /// Returned ArcMutexGuard needs to be dropped when done with.
     /// Don't go passing it around causing deadlocks and such.
-    pub(crate) fn get_store(&self) -> ArcMutexGuard<RawMutex, RxStore> {
+    pub(crate) fn get_store(&self) -> StoreArcMutexGuard {
         self.0.lock_arc()
     }
 
-    pub(crate) fn get_store_ptr(&self) -> Arc<Mutex<RxStore>> {
+    pub(crate) fn get_store_ptr(&self) -> StorePtr {
         self.0.clone()
     }
 
@@ -59,7 +60,7 @@ impl RxStoreManager {
     /// `Arc` and the resulting mutex guard has no lifetime requirements.
     ///
     /// This function does not block.
-    pub fn try_get_store(&self) -> Option<ArcMutexGuard<RawMutex, RxStore>> {
+    pub fn try_get_store(&self) -> Option<StoreArcMutexGuard> {
         self.0.try_lock_arc()
     }
 
@@ -74,7 +75,7 @@ impl RxStoreManager {
     ///
     /// Returned ArcMutexGuard needs to be dropped when done with.
     /// Don't go passing it around causing deadlocks and such.
-    pub fn try_get_store_timeout(&self, duration: Duration) -> Option<ArcMutexGuard<RawMutex, RxStore>> {
+    pub fn try_get_store_timeout(&self, duration: Duration) -> Option<StoreArcMutexGuard> {
         self.0.try_lock_arc_for(duration)
     }
 
@@ -115,11 +116,11 @@ impl RxStoreManager {
         f: F
     ) -> Observable<U>
         where
-            A: Clone + Send + Sync + 'static,
-            U: Default + Send + Sync + 'static,
-            S: Clone + HasSignalCloned<A> + Send + Sync + 'static,
-            <S as HasSignalCloned<A>>::Return: crate::signal::Signal + Send + Sync + 'static,
-            F: Fn(<<S as HasSignalCloned<A>>::Return as crate::signal::Signal>::Item) -> U + Send + Sync + 'static
+            A: Clone + SSS,
+            U: Default + SSS,
+            S: Clone + HasSignalCloned<A> + SSS,
+            <S as HasSignalCloned<A>>::Return: crate::signal::Signal + SSS,
+            F: Fn(<<S as HasSignalCloned<A>>::Return as crate::signal::Signal>::Item) -> U + SSS
     {
         let out = self.create_mutable(U::default());
         let out_mutable_clone = out.clone();
@@ -137,8 +138,10 @@ impl RxStoreManager {
     }
 }
 
-
-
+// pub enum ValueState<T> {
+//     Active(T),
+//     Cancelled(T)
+// }
 
 pub struct RxStore {
     stored: TypeMap![Send + Sync],
@@ -174,7 +177,7 @@ impl RxStore {
     }
 
     pub(crate) fn spawn_fut<F>(&mut self, provider_key: Option<SpawnedFutKey>, f: F)
-                               -> SpawnedFutKey
+        -> SpawnedFutKey
         where
             F: Future<Output = ()> + Send + 'static
     {
@@ -288,11 +291,10 @@ mod tests {
         let mutable_clone = mutable.clone();
         let observable_one = store.derive_observable(&*mutable_clone, |source| source + 20);
         let observable_two = store.derive_observable(&observable_one, |source| source + 30);
+
         mutable.set(100);
-
         tokio::time::sleep(Duration::from_millis(500)).await;
-
-        assert_eq!(observable_two.get(), 150)
+        assert_eq!(observable_two.get(), 150);
     }
 
     #[tokio::test]
@@ -306,10 +308,9 @@ mod tests {
         let observable_two = store.derive_observable_cloned(&observable_one, |source| {
             format!("{}, nice to see you", source)
         });
+
         mutable.set(format!("{} there", mutable.get_cloned()));
-
         tokio::time::sleep(Duration::from_millis(500)).await;
-
         assert_eq!(observable_two.get_cloned(), "hello there, general kenobi, nice to see you".to_string())
     }
 }
