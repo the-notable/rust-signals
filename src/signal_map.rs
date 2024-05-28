@@ -1070,7 +1070,7 @@ mod mutable_btree_map {
     pub(crate) mod observable_btree_map {
         use std::future::Future;
 
-        use crate::signal_map::{MutableBTreeMapLockMut, MutableSignalMap};
+        use crate::signal_map::{MapDiff, MutableBTreeMapLockMut, MutableSignalMap};
         use crate::store::{SpawnedFutKey, StoreArcMutexGuard};
         use crate::traits::{HasSignalMap, HasSignalMapCloned, IsObservable, ObserveMap, ObserveMapCloned, Provider};
 
@@ -1181,7 +1181,7 @@ mod mutable_btree_map {
             use std::time::Duration;
 
             use crate::signal_map::{MapDiff, MutableBTreeMap};
-            use crate::signal_map::observable_btree_map::{ObservableBTreeMap, ObserveMap, ObserveMapCloned};
+            use crate::signal_map::observable_btree_map::{handle_map_diff, ObservableBTreeMap, ObserveMap, ObserveMapCloned};
             use crate::signal_map::SignalMapExt;
             use crate::store::RxStoreManager;
 
@@ -1235,7 +1235,7 @@ mod mutable_btree_map {
             }
 
             #[tokio::test]
-            async fn it_observes_map() {
+            async fn it_clears_observable_map() {
                 let store = RxStoreManager::new();
                 let map = MutableBTreeMap::new();
                 let map_clone = map.clone();
@@ -1249,25 +1249,7 @@ mod mutable_btree_map {
                     store.get_store(),
                     |input, output| {
                         input.for_each(move |diff| {
-                            match diff {
-                                MapDiff::Replace { entries } => {
-                                    let mut lock = output.lock_mut();
-                                    entries.iter().for_each(|(k, v)| {
-                                        lock.insert(*v, *k);
-                                    })
-                                }
-                                MapDiff::Insert { key, value } |
-                                MapDiff::Update { key, value } => {
-                                    let mut lock = output.lock_mut();
-                                    lock.insert(value, key);
-                                }
-                                MapDiff::Remove { key } => {
-                                    let mut lock = output.lock_mut();
-                                    let k = *lock.iter().find(|(_, v)| *v == &key).unwrap().0;
-                                    lock.remove(&k);
-                                }
-                                MapDiff::Clear {} => output.lock_mut().clear()
-                            }
+                            handle_map_diff(diff, output.clone());
                             async {}
                         })
                     }
@@ -1275,12 +1257,41 @@ mod mutable_btree_map {
 
                 {
                     let mut lock = map.lock_mut();
-                    lock.insert(3, 3);
-                    lock.insert(4, 4);
+                    lock.clear();
                 }
                 tokio::time::sleep(Duration::from_millis(500)).await;
 
-                assert_eq!(obsv_map.lock_ref().get(&4).unwrap(), &4);
+                assert!(obsv_map.lock_ref().is_empty());
+            }
+            
+            #[tokio::test]
+            async fn it_removes_from_observable_map() {
+                let store = RxStoreManager::new();
+                let map = MutableBTreeMap::new();
+                let map_clone = map.clone();
+                {
+                    let mut lock = map.lock_mut();
+                    lock.insert(1, 1);
+                    lock.insert(2, 2);
+                }
+                let obsv_map = ObservableBTreeMap::observe_map(
+                    map_clone,
+                    store.get_store(),
+                    |input, output| {
+                        input.for_each(move |diff| {
+                            handle_map_diff(diff, output.clone());
+                            async {}
+                        })
+                    }
+                );
+
+                {
+                    let mut lock = map.lock_mut();
+                    lock.remove(&1);
+                }
+                tokio::time::sleep(Duration::from_millis(500)).await;
+
+                assert!(obsv_map.lock_ref().get(&1).is_none());
             }
 
             #[tokio::test]
@@ -1298,26 +1309,7 @@ mod mutable_btree_map {
                     store.get_store(),
                     |input, output| {
                         input.for_each(move |diff| {
-                            match diff {
-                                MapDiff::Replace { entries } => {
-                                    let mut lock = output.lock_mut();
-                                    entries.iter().for_each(|(k, v)| {
-                                        println!("jkfsjdlkfjsdklfjskldfj;slkd");
-                                        lock.insert(*v, *k * 2);
-                                    })
-                                }
-                                MapDiff::Insert { key, value } |
-                                MapDiff::Update { key, value } => {
-                                    let mut lock = output.lock_mut();
-                                    lock.insert(value, key);
-                                }
-                                MapDiff::Remove { key } => {
-                                    let mut lock = output.lock_mut();
-                                    let k = *lock.iter().find(|(_, v)| *v == &key).unwrap().0;
-                                    lock.remove(&k);
-                                }
-                                MapDiff::Clear {} => output.lock_mut().clear()
-                            }
+                            handle_map_diff(diff, output.clone());
                             async {}
                         })
                     }
@@ -1329,29 +1321,9 @@ mod mutable_btree_map {
                 let obsv_map_two = ObservableBTreeMap::observe_map(
                     obsv_map_one_clone,
                     store.get_store(),
-                    |input, output| {
+                    |input, output: MutableBTreeMap<i32, i32>| {
                         input.for_each(move |diff| {
-                            match diff {
-                                MapDiff::Replace { entries } => {
-                                    let mut lock = output.lock_mut();
-                                    entries.iter().for_each(|(k, v)| {
-                                        println!("====================================");
-                                        lock.insert(*v, *k * 3);
-                                    })
-                                }
-                                MapDiff::Insert { key, value } |
-                                MapDiff::Update { key, value } => {
-                                    println!("key: {}, value: {}", key, value * 4);
-                                    let mut lock = output.lock_mut();
-                                    lock.insert(key, value * 4);
-                                }
-                                MapDiff::Remove { key } => {
-                                    let mut lock = output.lock_mut();
-                                    let k = *lock.iter().find(|(_, v)| *v == &key).unwrap().0;
-                                    lock.remove(&k);
-                                }
-                                MapDiff::Clear {} => output.lock_mut().clear()
-                            }
+                            handle_map_diff(diff, output.clone());
                             async {}
                         })
                     }
@@ -1372,105 +1344,32 @@ mod mutable_btree_map {
                 println!("{:?}", obsv_map_one);
                 println!("{:?}", obsv_map_two);
 
-                assert_eq!(obsv_map_two.lock_ref().get(&2).unwrap(), &1);
+                assert_eq!(obsv_map_two.lock_ref().get(&2).unwrap(), &18);
             }
         }
 
+        fn handle_map_diff(diff: MapDiff<i32, i32>, output: MutableBTreeMap<i32, i32>) 
+        {
+            match diff {
+                MapDiff::Replace { entries } => {
+                    let mut lock = output.lock_mut();
+                    entries.iter().for_each(|(k, v)| {
+                        lock.insert(*k, *v * 3);
+                    })
+                },
+                MapDiff::Insert { key, value } |
+                MapDiff::Update { key, value } => {
+                    let mut lock = output.lock_mut();
+                    lock.insert(key, value * 3);
+                },
+                MapDiff::Remove { key } => {
+                    let mut lock = output.lock_mut();
+                    //let k = *lock.iter().find(|(_, v)| *v == &key).unwrap().0;
+                    lock.remove(&key);
+                },
+                MapDiff::Clear {} => output.lock_mut().clear()
+            }
+        }
 
     }
 }
-
-// impl<T, O, K1, K2, V1, V2, F, U> ObserveMap<T, O, K1, V1, F, U> for ObservableBTreeMap<K2, V2>
-//     where
-//         T: HasSignalMap<K1, V1>,
-//         O: IsObservable<Inner = MutableBTreeMap<K2, V2>>,
-//         <O as IsObservable>::Inner: Clone,
-//         K1: Copy + Ord,
-//         V1: Copy,
-//         F: Fn(MutableSignalMap<K1, V1>, <O as IsObservable>::Inner) -> U,
-//         U: Future<Output = ()>  + Send + 'static
-// {
-//     type Output = ObservableBTreeMap<K2, V2>;
-//
-//     fn observe_map(input: T, mut store_ref: StoreArcMutexGuard, f: F) -> Self::Output {
-//         let out = O::new_inner();
-//         let out_clone = out.clone();
-//         let fut = f(input.signal_map(), out_clone);
-//
-//         let fut_key = store_ref.spawn_fut(None, fut);
-//         ObservableBTreeMap {
-//             map: out,
-//             fut_key,
-//         }
-//     }
-// }
-
-// trait ObserveMap<T, O, K, V, F, U>
-//     where
-//         T: HasSignalMap<K, V>,
-//         O: IsObservable,
-//         <O as IsObservable>::Inner: Clone,
-//         K: Copy + Ord,
-//         V: Copy,
-//         F: Fn(MutableSignalMap<K, V>, <O as IsObservable>::Inner) -> U,
-//         U: Future<Output = ()>  + Send + 'static
-// {
-//     type Output;
-//
-//     fn observe_map(input: T, store_ref: StoreArcMutexGuard, f: F) -> Self::Output;
-// }
-
-// trait ObserveMapCloned<T, O, K, V, F, U>
-//     where
-//         T: HasSignalMapCloned<K, V>,
-//         O: IsObservable,
-//         <O as IsObservable>::Inner: Clone,
-//         K: Clone + Ord,
-//         V: Clone,
-//         F: Fn(MutableSignalMap<K, V>, <O as IsObservable>::Inner) -> U,
-//         U: Future<Output = ()>  + Send + 'static
-// {
-//     type Output;
-//
-//     fn observe_map_cloned(input: T, store_ref: StoreArcMutexGuard, f: F) -> Self::Output;
-// }
-
-// impl<T, O, K1, K2, V1, V2, F, U> ObserveMap<T, O, K1, V1, F, U> for MutableBTreeMap<K2, V2>
-//     where
-//         T: HasSignalMap<K1, V1>,
-//         O: IsObservable<Inner = MutableBTreeMap<K2, V2>>,
-//         <O as IsObservable>::Inner: Clone,
-//         K1: Copy + Ord,
-//         V1: Copy,
-//         F: Fn(MutableSignalMap<K1, V1>, <O as IsObservable>::Inner) -> U,
-//         U: Future<Output = ()>  + Send + 'static
-// {
-//     type Output = ObservableBTreeMap<K2, V2>;
-//
-//     fn observe_map(input: T, mut store_ref: StoreArcMutexGuard, f: F) -> Self::Output {
-//         let out = O::new_inner();
-//         let out_clone = out.clone();
-//         let fut = f(input.signal_map(), out_clone);
-//
-//         let fut_key = store_ref.spawn_fut(None, fut);
-//         ObservableBTreeMap {
-//             map: out,
-//             fut_key,
-//         }
-//     }
-// }
-
-// trait ObserveMapCloned<T, O, K, V, F, U>
-//     where
-//         T: HasSignalMapCloned<K, V>,
-//         O: IsObservable,
-//         <O as IsObservable>::Inner: Clone,
-//         K: Clone + Ord,
-//         V: Clone,
-//         F: Fn(MutableSignalMap<K, V>, <O as IsObservable>::Inner) -> U,
-//         U: Future<Output = ()>  + Send + 'static
-// {
-//     type Output;
-//
-//     fn observe_map_cloned(input: T, store_ref: StoreArcMutexGuard, f: F) -> Self::Output;
-// }
