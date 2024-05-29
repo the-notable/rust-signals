@@ -1,5 +1,5 @@
 use std::task::Poll;
-use futures_signals::cancelable_future;
+use rx_store::cancelable_future;
 use futures_util::future::{ready, FutureExt};
 
 mod util;

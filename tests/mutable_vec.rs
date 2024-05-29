@@ -1,6 +1,6 @@
 use std::task::Poll;
 use std::cmp::{PartialOrd, Ordering};
-use futures_signals::signal_vec::{VecDiff, MutableVec, MutableVecLockMut};
+use rx_store::signal_vec::{VecDiff, MutableVec, MutableVecLockMut};
 
 mod util;
 

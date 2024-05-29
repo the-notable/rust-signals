@@ -2,7 +2,7 @@ use std::sync::Mutex;
 use std::task::Poll;
 use indoc::formatdoc;
 use once_cell::sync::Lazy;
-use futures_signals::signal_vec::{SignalVecExt, VecDiff};
+use rx_store::signal_vec::{SignalVecExt, VecDiff};
 
 mod util;
 

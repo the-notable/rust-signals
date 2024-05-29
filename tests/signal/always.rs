@@ -1,5 +1,5 @@
 use std::task::Poll;
-use futures_signals::signal::{SignalExt, always};
+use rx_store::signal::{SignalExt, always};
 use crate::util;
 
 

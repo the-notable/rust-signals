@@ -1,6 +1,6 @@
 use std::task::Poll;
-use futures_signals::signal::SignalExt;
-use futures_signals::signal_vec::VecDiff;
+use rx_store::signal::SignalExt;
+use rx_store::signal_vec::VecDiff;
 use crate::util;
 
 

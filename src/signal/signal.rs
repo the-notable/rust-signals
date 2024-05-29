@@ -120,7 +120,7 @@ pub trait SignalExt: Signal {
     /// Add `1` to the value:
     ///
     /// ```rust
-    /// # use futures_signals::signal::{always, SignalExt};
+    /// # use rx_store::signal::{always, SignalExt};
     /// # let input = always(1);
     /// let mapped = input.map(|value| value + 1);
     /// ```
@@ -136,7 +136,7 @@ pub trait SignalExt: Signal {
     /// Formatting to a `String`:
     ///
     /// ```rust
-    /// # use futures_signals::signal::{always, SignalExt};
+    /// # use rx_store::signal::{always, SignalExt};
     /// # let input = always(1);
     /// let mapped = input.map(|value| format!("{}", value));
     /// ```
@@ -279,7 +279,7 @@ pub trait SignalExt: Signal {
     /// Call an asynchronous network API whenever the input changes:
     ///
     /// ```rust
-    /// # use futures_signals::signal::{always, SignalExt};
+    /// # use rx_store::signal::{always, SignalExt};
     /// # use futures_util::future::{ready, Ready};
     /// # fn call_network_api(value: u32) -> Ready<()> { ready(()) }
     /// # fn main() {
@@ -336,7 +336,7 @@ pub trait SignalExt: Signal {
     /// Add `1` to the value, but only if the value is less than `5`:
     ///
     /// ```rust
-    /// # use futures_signals::signal::{always, SignalExt};
+    /// # use rx_store::signal::{always, SignalExt};
     /// # let input = always(1);
     /// let mapped = input.filter_map(|value| {
     ///     if value < 5 {
@@ -381,7 +381,7 @@ pub trait SignalExt: Signal {
     ///
     /// ```rust
     /// # use core::future::Future;
-    /// # use futures_signals::signal::{always, SignalExt};
+    /// # use rx_store::signal::{always, SignalExt};
     /// # fn sleep(ms: i32) -> impl Future<Output = ()> { async {} }
     /// # let input = always(1);
     /// let output = input.throttle(|| sleep(1_000));
@@ -526,7 +526,7 @@ pub trait SignalExt: Signal {
     /// # Examples
     ///
     /// ```rust
-    /// # use futures_signals::signal::{always, SignalExt};
+    /// # use rx_store::signal::{always, SignalExt};
     /// # let input = always(1);
     /// // Stops the signal when x is above 5
     /// let output = input.stop_if(|x| *x > 5);

@@ -1,7 +1,7 @@
 use std::task::Poll;
-use futures_signals::cancelable_future;
-use futures_signals::signal::{SignalExt, Mutable, channel};
-use futures_signals::traits::{HasSignal, HasSignalCloned};
+use rx_store::cancelable_future;
+use rx_store::signal::{SignalExt, Mutable, channel};
+use rx_store::traits::{HasSignal, HasSignalCloned};
 use crate::util;
 
 

@@ -1,8 +1,8 @@
-use futures_signals::map_ref;
-use futures_signals::signal::{SignalExt, Mutable, Broadcaster, always, from_stream};
+use rx_store::map_ref;
+use rx_store::signal::{SignalExt, Mutable, Broadcaster, always, from_stream};
 use futures_executor::block_on_stream;
 use std::task::Poll;
-use futures_signals::traits::HasSignal;
+use rx_store::traits::HasSignal;
 
 mod util;
 

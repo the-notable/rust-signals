@@ -2,7 +2,8 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
-use parking_lot::{ArcMutexGuard, Mutex, RawMutex};
+use parking_lot::{Mutex, RawMutex};
+use parking_lot::lock_api::ArcMutexGuard;
 use slotmap::{new_key_type, SlotMap};
 use state::TypeMap;
 use tokio::{select, spawn};
@@ -22,6 +23,7 @@ pub(crate) type StoreArcMutexGuard = ArcMutexGuard<RawMutex, RxStore>;
 
 /// Controls access to internal store by controlling
 /// access to mutex lock
+#[derive(Debug)]
 pub struct RxStoreManager(StorePtr);
 
 impl RxStoreManager {

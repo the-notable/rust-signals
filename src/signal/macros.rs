@@ -112,8 +112,8 @@ macro_rules! map_mut {
 /// The `map_ref` macro can be used to *combine* multiple `Signal`s together:
 ///
 /// ```rust
-/// # use futures_signals::map_ref;
-/// # use futures_signals::signal::Mutable;
+/// # use rx_store::map_ref;
+/// # use rx_store::signal::Mutable;
 /// # fn main() {
 /// #
 /// let mutable1 = Mutable::new(1);
@@ -147,7 +147,7 @@ macro_rules! map_mut {
 /// But let's say that `mutable1` changes...
 ///
 /// ```rust
-/// # use futures_signals::signal::Mutable;
+/// # use rx_store::signal::Mutable;
 /// # let mutable1 = Mutable::new(1);
 /// #
 /// mutable1.set(5);
@@ -156,7 +156,7 @@ macro_rules! map_mut {
 /// ...then `output` will now have the value `7` (because it's `5 + 2`). And then if `mutable2` changes...
 ///
 /// ```rust
-/// # use futures_signals::signal::Mutable;
+/// # use rx_store::signal::Mutable;
 /// # let mutable2 = Mutable::new(2);
 /// #
 /// mutable2.set(10);
@@ -167,7 +167,7 @@ macro_rules! map_mut {
 /// If multiple input Signals change at the same time, then it will only update once:
 ///
 /// ```rust
-/// # use futures_signals::signal::Mutable;
+/// # use rx_store::signal::Mutable;
 /// # let mutable1 = Mutable::new(5);
 /// # let mutable2 = Mutable::new(10);
 /// #
@@ -183,8 +183,8 @@ macro_rules! map_mut {
 /// There is also a shorthand syntax:
 ///
 /// ```rust
-/// # use futures_signals::map_ref;
-/// # use futures_signals::signal::always;
+/// # use rx_store::map_ref;
+/// # use rx_store::signal::always;
 /// # fn main() {
 /// # let signal1 = always(1);
 /// # let signal2 = always(2);
@@ -196,8 +196,8 @@ macro_rules! map_mut {
 /// The above code is exactly the same as this:
 ///
 /// ```rust
-/// # use futures_signals::map_ref;
-/// # use futures_signals::signal::always;
+/// # use rx_store::map_ref;
+/// # use rx_store::signal::always;
 /// # fn main() {
 /// # let signal1 = always(1);
 /// # let signal2 = always(2);
@@ -216,8 +216,8 @@ macro_rules! map_mut {
 /// In addition, it's possible to use pattern matching with the longer syntax:
 ///
 /// ```rust
-/// # use futures_signals::map_ref;
-/// # use futures_signals::signal::always;
+/// # use rx_store::map_ref;
+/// # use rx_store::signal::always;
 /// # fn main() {
 /// # struct SomeStruct { foo: u32 }
 /// # let signal1 = always((1, 2));
@@ -235,8 +235,8 @@ macro_rules! map_mut {
 /// It's also possible to combine more than two Signals:
 ///
 /// ```rust
-/// # use futures_signals::map_ref;
-/// # use futures_signals::signal::Mutable;
+/// # use rx_store::map_ref;
+/// # use rx_store::signal::Mutable;
 /// # fn main() {
 /// # let mutable1 = Mutable::new(1);
 /// # let mutable2 = Mutable::new(2);
@@ -277,8 +277,8 @@ macro_rules! map_mut {
 /// when you need to:
 ///
 /// ```rust
-/// # use futures_signals::map_ref;
-/// # use futures_signals::signal::Mutable;
+/// # use rx_store::map_ref;
+/// # use rx_store::signal::Mutable;
 /// # fn main() {
 /// # let mutable1 = Mutable::new(1);
 /// # let mutable2 = Mutable::new(2);

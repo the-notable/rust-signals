@@ -1,6 +1,6 @@
 [package]
-name = "futures-signals"
-version = "0.3.33"
+name = "rx-store"
+version = "0.1.0"
 authors = ["Pauan <pcxunlimited@gmail.com>"]
 description = "Zero cost FRP signals using the futures crate"
 repository = "https://github.com/Pauan/rust-signals"
@@ -9,7 +9,7 @@ readme = "README.md"
 license = "MIT"
 keywords = ["signal", "reactive", "frp", "futures"]
 categories = ["asynchronous", "concurrency", "data-structures"]
-edition = "2018"
+edition = "2021"
 
 [features]
 default = ["debug", "serde"]

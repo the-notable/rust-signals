@@ -10,9 +10,9 @@ macro_rules! map_tests {
         mod $name {
             use super::util;
             use std::task::Poll;
-            use futures_signals::$name;
-            use futures_signals::signal::{SignalExt, always};
-            use futures_signals::traits::HasSignal;
+            use rx_store::$name;
+            use rx_store::signal::{SignalExt, always};
+            use rx_store::traits::HasSignal;
 
             #[test]
             fn send_sync() {
@@ -415,7 +415,7 @@ macro_rules! map_tests {
 
             #[test]
             fn foo() {
-                use futures_signals::signal::{Signal, Mutable};
+                use rx_store::signal::{Signal, Mutable};
 
                 let foo = Mutable::new(0);
                 let bar = Mutable::new(1);
@@ -432,7 +432,7 @@ macro_rules! map_tests {
                 };
 
                 /*
-                use futures_signals::internal::{MapRef1, MapRefSignal};
+                use rx_store::internal::{MapRef1, MapRefSignal};
 
                 let mut output = {
                     let mut foo = MapRef1::new(foo.signal().map_future(|value| async move { value }));

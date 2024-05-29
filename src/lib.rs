@@ -24,7 +24,7 @@ pub mod signal_map;
 
 mod atomic;
 mod future;
-mod store;
+pub mod store;
 pub mod traits;
 
 pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFuture};
@@ -42,7 +42,7 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 /// Before I can fully explain Signals, first I have to explain [`Mutable`](../signal/struct.Mutable.html):
 ///
 /// ```rust
-/// use futures_signals::signal::Mutable;
+/// use rx_store::signal::Mutable;
 ///
 /// let my_state = Mutable::new(5);
 /// ```
@@ -62,7 +62,7 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 /// Let's see it in action:
 ///
 /// ```rust
-/// # use futures_signals::signal::Mutable;
+/// # use rx_store::signal::Mutable;
 /// # let my_state = Mutable::new(5);
 /// #
 /// // Acquires a mutable lock on my_state
@@ -85,10 +85,10 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 /// to be efficiently notified whenever the `Mutable` changes:
 ///
 /// ```rust
-/// # use futures_signals::signal::Mutable;
+/// # use rx_store::signal::Mutable;
 /// # let my_state = Mutable::new(10);
 /// #
-/// use futures_signals::signal::SignalExt;
+/// use rx_store::signal::SignalExt;
 ///
 /// let future = my_state.signal().for_each(|value| {
 ///     // This code is run for the current value of my_state,
@@ -136,9 +136,9 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 /// If you need more control, you can use [`to_stream`](../signal/trait.SignalExt.html#method.to_stream) instead:
 ///
 /// ```rust
-/// # use futures_signals::signal::Mutable;
+/// # use rx_store::signal::Mutable;
 /// # let my_state = Mutable::new(10);
-/// # use futures_signals::signal::SignalExt;
+/// # use rx_store::signal::SignalExt;
 /// #
 /// let stream = my_state.signal().to_stream();
 /// ```
@@ -178,8 +178,8 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 /// (and mix-and-match them):
 ///
 /// ```rust
-/// # use futures_signals::signal::Mutable;
-/// # use futures_signals::traits::HasSignal;
+/// # use rx_store::signal::Mutable;
+/// # use rx_store::traits::HasSignal;
 /// # let my_state = Mutable::new(10);
 /// #
 /// let signal1 = my_state.signal();
@@ -222,8 +222,8 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 ///
 /// ```rust
 /// # use std::future::Future;
-/// # use futures_signals::signal::Mutable;
-/// # use futures_signals::signal::SignalExt;
+/// # use rx_store::signal::Mutable;
+/// # use rx_store::signal::SignalExt;
 /// # fn do_some_async_calculation(value: u32) -> impl Future<Output = ()> { async {} }
 /// # fn main() {
 /// # let my_state = Mutable::new(3);
@@ -253,13 +253,13 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 /// to use multiple input `Signal`s:
 ///
 /// ```rust
-/// # use futures_signals::signal::Mutable;
+/// # use rx_store::signal::Mutable;
 /// # fn main() {
 /// # let foo = Mutable::new(1);
 /// # let bar = Mutable::new(2);
 /// # let qux = Mutable::new(3);
 /// #
-/// use futures_signals::map_ref;
+/// use rx_store::map_ref;
 ///
 /// let output = map_ref! {
 ///     let foo = foo.signal(),
@@ -289,7 +289,7 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 /// Here is an example:
 ///
 /// ```rust
-/// # use futures_signals::signal::Mutable;
+/// # use rx_store::signal::Mutable;
 /// # let my_state = Mutable::new(10);
 /// #
 /// my_state.set(2);
@@ -335,7 +335,7 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 /// Here is an example:
 ///
 /// ```rust
-/// use futures_signals::signal_vec::MutableVec;
+/// use rx_store::signal_vec::MutableVec;
 ///
 /// let my_vec: MutableVec<u32> = MutableVec::new();
 /// ```
@@ -349,7 +349,7 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 /// The lock contains many of the `Vec` methods:
 ///
 /// ```rust
-/// # use futures_signals::signal_vec::MutableVec;
+/// # use rx_store::signal_vec::MutableVec;
 /// # let my_vec: MutableVec<u32> = MutableVec::new();
 /// #
 /// let mut lock = my_vec.lock_mut();
@@ -365,7 +365,7 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 ///
 /// ```rust
 /// # use std::sync::Arc;
-/// # use futures_signals::signal_vec::MutableVec;
+/// # use rx_store::signal_vec::MutableVec;
 /// # let my_vec: MutableVec<u32> = MutableVec::new();
 /// # let mut lock = my_vec.lock_mut();
 /// #
@@ -382,7 +382,7 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 /// methods on it:
 ///
 /// ```rust
-/// # use futures_signals::signal_vec::MutableVec;
+/// # use rx_store::signal_vec::MutableVec;
 /// # let my_vec: MutableVec<u32> = MutableVec::new_with_values(vec![0]);
 /// # let lock = my_vec.lock_mut();
 /// #
@@ -400,10 +400,10 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 /// to be efficiently notified when it changes:
 ///
 /// ```rust
-/// # use futures_signals::signal_vec::MutableVec;
+/// # use rx_store::signal_vec::MutableVec;
 /// # let my_vec: MutableVec<u32> = MutableVec::new();
 /// #
-/// use futures_signals::signal_vec::{SignalVecExt, VecDiff};
+/// use rx_store::signal_vec::{SignalVecExt, VecDiff};
 ///
 /// let future = my_vec.signal_vec().for_each(|change| {
 ///     match change {
@@ -472,9 +472,9 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 /// can be chained:
 ///
 /// ```rust
-/// # use futures_signals::signal_vec::MutableVec;
+/// # use rx_store::signal_vec::MutableVec;
 /// # let my_vec: MutableVec<u32> = MutableVec::new();
-/// # use futures_signals::signal_vec::SignalVecExt;
+/// # use rx_store::signal_vec::SignalVecExt;
 /// #
 /// let output = my_vec.signal_vec()
 ///     .filter(|value| *value < 5)
@@ -507,7 +507,7 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 /// then it will not notify at all:
 ///
 /// ```rust
-/// # use futures_signals::signal_vec::MutableVec;
+/// # use rx_store::signal_vec::MutableVec;
 /// # let my_vec: MutableVec<u32> = MutableVec::new();
 /// #
 /// my_vec.lock_mut().retain(|_| { true });
@@ -546,9 +546,9 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 /// the `SignalVec`:
 ///
 /// ```rust
-/// # use futures_signals::signal_vec::MutableVec;
+/// # use rx_store::signal_vec::MutableVec;
 /// # let my_vec: MutableVec<u32> = MutableVec::new();
-/// # use futures_signals::signal_vec::{SignalVecExt, VecDiff};
+/// # use rx_store::signal_vec::{SignalVecExt, VecDiff};
 /// #
 /// let mut copied_vec = vec![];
 ///
@@ -598,7 +598,7 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 /// `Signal` version of [`BTreeMap`](https://doc.rust-lang.org/std/collections/struct.BTreeMap.html):
 ///
 /// ```rust
-/// use futures_signals::signal_map::MutableBTreeMap;
+/// use rx_store::signal_map::MutableBTreeMap;
 ///
 /// let map = MutableBTreeMap::new();
 ///
@@ -613,10 +613,10 @@ pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFut
 /// transformations and notifications:
 ///
 /// ```rust
-/// # use futures_signals::signal_map::MutableBTreeMap;
+/// # use rx_store::signal_map::MutableBTreeMap;
 /// # let map: MutableBTreeMap<&str, u32> = MutableBTreeMap::new();
 /// #
-/// use futures_signals::signal_map::{SignalMapExt, MapDiff};
+/// use rx_store::signal_map::{SignalMapExt, MapDiff};
 ///
 /// let output = map.signal_map().for_each(|change| {
 ///     match change {

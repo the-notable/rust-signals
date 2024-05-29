@@ -1,9 +1,9 @@
 use std::rc::Rc;
 use std::cell::Cell;
 use std::task::Poll;
-use futures_signals::signal::{SignalExt, Mutable};
+use rx_store::signal::{SignalExt, Mutable};
 use futures_util::future::poll_fn;
-use futures_signals::traits::HasSignal;
+use rx_store::traits::HasSignal;
 use crate::util;
 
 

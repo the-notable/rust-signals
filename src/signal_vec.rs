@@ -169,7 +169,7 @@ pub trait SignalVecExt: SignalVec {
     /// Add `1` to each value:
     ///
     /// ```rust
-    /// # use futures_signals::signal_vec::{always, SignalVecExt};
+    /// # use rx_store::signal_vec::{always, SignalVecExt};
     /// # let input = always(vec![1, 2, 3, 4, 5]);
     /// let mapped = input.map(|value| value + 1);
     /// ```
@@ -181,7 +181,7 @@ pub trait SignalVecExt: SignalVec {
     /// Formatting to a `String`:
     ///
     /// ```rust
-    /// # use futures_signals::signal_vec::{always, SignalVecExt};
+    /// # use rx_store::signal_vec::{always, SignalVecExt};
     /// # let input = always(vec![1, 2, 3, 4, 5]);
     /// let mapped = input.map(|value| format!("{}", value));
     /// ```
@@ -231,7 +231,7 @@ pub trait SignalVecExt: SignalVec {
     /// # Examples
     ///
     /// ```rust
-    /// # use futures_signals::signal_vec::{always, SignalVecExt};
+    /// # use rx_store::signal_vec::{always, SignalVecExt};
     /// # let left = always(vec![1, 2, 3]);
     /// # let right = always(vec![4, 5, 6]);
     /// // left = [1, 2, 3]
@@ -300,7 +300,7 @@ pub trait SignalVecExt: SignalVec {
     /// Only include values less than `5`:
     ///
     /// ```rust
-    /// # use futures_signals::signal_vec::{always, SignalVecExt};
+    /// # use rx_store::signal_vec::{always, SignalVecExt};
     /// # let input = always(vec![3, 1, 6, 2, 0, 4, 5, 8, 9, 7]);
     /// let filtered = input.filter(|value| *value < 5);
     /// ```
@@ -415,7 +415,7 @@ pub trait SignalVecExt: SignalVec {
     /// like this:
     ///
     /// ```rust
-    /// # use futures_signals::signal_vec::{always, SignalVecExt};
+    /// # use rx_store::signal_vec::{always, SignalVecExt};
     /// # let input = always(vec![3, 1, 6, 2, 0, 4, 5, 8, 9, 7]);
     /// use std::rc::Rc;
     ///
@@ -431,8 +431,8 @@ pub trait SignalVecExt: SignalVec {
     /// [`map_signal`](#method.map_signal):
     ///
     /// ```rust
-    /// # use futures_signals::{signal, signal_vec};
-    /// # use futures_signals::signal_vec::SignalVecExt;
+    /// # use rx_store::{signal, signal_vec};
+    /// # use rx_store::signal_vec::SignalVecExt;
     /// # let input = signal_vec::always(vec![3, 1, 6, 2, 0, 4, 5, 8, 9, 7]);
     /// # fn returns_a_signal(x: u32) -> impl signal::Signal<Item = u32> { signal::always(x) }
     /// let sorted = input
@@ -450,7 +450,7 @@ pub trait SignalVecExt: SignalVec {
     /// Sort using the standard [`Ord`](https://doc.rust-lang.org/std/cmp/trait.Ord.html) implementation:
     ///
     /// ```rust
-    /// # use futures_signals::signal_vec::{always, SignalVecExt};
+    /// # use rx_store::signal_vec::{always, SignalVecExt};
     /// # let input = always(vec![3, 1, 6, 2, 0, 4, 5, 8, 9, 7]);
     /// let sorted = input.sort_by_cloned(Ord::cmp);
     /// ```
@@ -462,7 +462,7 @@ pub trait SignalVecExt: SignalVec {
     /// Sort using a custom function:
     ///
     /// ```rust
-    /// # use futures_signals::signal_vec::{always, SignalVecExt};
+    /// # use rx_store::signal_vec::{always, SignalVecExt};
     /// # let input = always(vec![3, 1, 6, 2, 0, 4, 5, 8, 9, 7]);
     /// let sorted = input.sort_by_cloned(|left, right| left.cmp(right).reverse());
     /// ```

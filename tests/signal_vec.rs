@@ -1,5 +1,5 @@
 use std::task::Poll;
-use futures_signals::signal_vec::{MutableVec, SignalVecExt, VecDiff, from_stream};
+use rx_store::signal_vec::{MutableVec, SignalVecExt, VecDiff, from_stream};
 
 mod util;
 

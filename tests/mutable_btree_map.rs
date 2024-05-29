@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::task::Poll;
-use futures_signals::signal_map::{MapDiff, MutableBTreeMap, MutableBTreeMapLockMut};
-use futures_signals::traits::{HasSignalMap, HasSignalMapCloned};
+use rx_store::signal_map::{MapDiff, MutableBTreeMap, MutableBTreeMapLockMut};
+use rx_store::traits::{HasSignalMap, HasSignalMapCloned};
 
 mod util;
 

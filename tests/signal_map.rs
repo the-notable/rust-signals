@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::task::Poll;
-use futures_signals::signal::{self, SignalExt};
-use futures_signals::signal_map::{self, MapDiff, SignalMapExt};
+use rx_store::signal::{self, SignalExt};
+use rx_store::signal_map::{self, MapDiff, SignalMapExt};
 
 mod util;
 
