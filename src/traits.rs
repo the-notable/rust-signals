@@ -1,6 +1,7 @@
 use std::future::Future;
+use crate::signal::Signal;
 use crate::signal_map::MutableSignalMap;
-use crate::store::{SpawnedFutKey, StoreArcMutexGuard};
+use crate::store::{SpawnedFutureKey, StoreArcMutexGuard};
 
 pub trait SSS: Send + Sync + 'static {}
 
@@ -15,7 +16,7 @@ pub trait GetCloned<T: Clone> {
 }
 
 pub trait HasSignal<T: Copy> {
-    type Return;//: Signal + Send + Sync + 'static;
+    type Return;
 
     fn signal(&self) -> Self::Return;
 }
@@ -43,7 +44,7 @@ pub trait HasSignalMapCloned<K, V>
 }
 
 pub trait Provider {
-    fn fut_key(&self) -> Option<SpawnedFutKey>;
+    fn fut_key(&self) -> Option<SpawnedFutureKey>;
 }
 
 pub trait ObserveMap<T, O, K, V, F, U>
@@ -77,5 +78,9 @@ pub trait IsObservable {
 
     fn new_inner() -> Self::Inner;
 
-    fn new(inner: Self::Inner, fut_key: SpawnedFutKey) -> Self;
+    fn new(inner: Self::Inner, fut_key: SpawnedFutureKey) -> Self;
+}
+
+pub trait HasSpawnedFutureKey {
+    fn spawned_future_key(&self) -> SpawnedFutureKey;
 }

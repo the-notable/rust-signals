@@ -10,12 +10,12 @@ use tokio::{select, spawn};
 use tokio_util::sync::CancellationToken;
 
 use crate::observable::Observable;
-use crate::signal::Mutable;
+use crate::signal::{Mutable, Signal};
 use crate::signal::SignalExt;
-use crate::traits::{HasSignal, HasSignalCloned, SSS};
+use crate::traits::{HasSignal, HasSignalCloned, HasSpawnedFutureKey, SSS};
 
 new_key_type! {
-    pub struct SpawnedFutKey;
+    pub struct SpawnedFutureKey;
 }
 
 pub(crate) type StorePtr = Arc<Mutex<RxStore>>;
@@ -28,7 +28,7 @@ pub struct RxStoreManager(StorePtr);
 
 impl RxStoreManager {
 
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self(Arc::new(Mutex::new(RxStore::new())))
     }
 
@@ -81,6 +81,34 @@ impl RxStoreManager {
         self.0.try_lock_arc_for(duration)
     }
 
+    pub fn get_child_cancellation_token<S>(&self, source: &S) -> Result<CancellationToken, &'static str>
+        where S: HasSpawnedFutureKey 
+    {
+        let lock = self.get_store();
+        let key = lock.spawned_futs
+            .get(source.spawned_future_key())
+            .ok_or("No associated token found for source")?;
+        Ok(key.child_token())    
+    }
+
+    pub fn register_effect<T, S, F>(&self, source: &S, f: F) -> Result<SpawnedFutureKey, &'static str>
+        where 
+            T: Copy,
+            S: HasSpawnedFutureKey + HasSignal<T> + Clone,
+            <S as HasSignal<T>>::Return: Signal + Send + 'static,
+            F: Fn(<<S as HasSignal<T>>::Return as Signal>::Item) -> () + Send + 'static
+    {
+        let source_cloned = source.clone();
+        let fut = source_cloned.signal().for_each(move |v| {
+            f(v);
+            async {}
+        });
+
+        let mut lock = self.get_store();
+        let key = lock.spawn_fut(Some(source.spawned_future_key()), fut);
+        Ok(key)
+    }
+    
     pub fn create_mutable<T: 'static>(&self, v: T) -> Mutable<T> {
         Mutable::new(v)
     }
@@ -148,7 +176,7 @@ impl RxStoreManager {
 #[derive(Debug)]
 pub struct RxStore {
     stored: TypeMap![Send + Sync],
-    spawned_futs: SlotMap<SpawnedFutKey, CancellationToken>
+    spawned_futs: SlotMap<SpawnedFutureKey, CancellationToken>
 }
 
 impl RxStore {
@@ -179,8 +207,8 @@ impl RxStore {
             .expect("state: get() called before set() for given type")
     }
 
-    pub(crate) fn spawn_fut<F>(&mut self, provider_key: Option<SpawnedFutKey>, f: F)
-        -> SpawnedFutKey
+    pub(crate) fn spawn_fut<F>(&mut self, provider_key: Option<SpawnedFutureKey>, f: F)
+                               -> SpawnedFutureKey
         where
             F: Future<Output = ()> + Send + 'static
     {
@@ -202,7 +230,7 @@ impl RxStore {
         key
     }
 
-    pub(crate) fn clean_up(&mut self, s: SpawnedFutKey) {
+    pub(crate) fn clean_up(&mut self, s: SpawnedFutureKey) {
         if let Some(v) = self.spawned_futs.get(s) { v.cancel() }
         self.spawned_futs.remove(s);
     }

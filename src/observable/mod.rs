@@ -1,11 +1,17 @@
 use crate::signal::{Mutable, MutableSignal, MutableSignalCloned};
-use crate::store::SpawnedFutKey;
-use crate::traits::{HasSignal, HasSignalCloned};
+use crate::store::SpawnedFutureKey;
+use crate::traits::{HasSignal, HasSignalCloned, HasSpawnedFutureKey};
 
 #[derive(Debug, Clone)]
 pub struct Observable<T> {
     pub(crate) mutable: Mutable<T>,
-    pub(crate) fut_key: SpawnedFutKey
+    pub(crate) fut_key: SpawnedFutureKey
+}
+
+impl<T> HasSpawnedFutureKey for Observable<T> {
+    fn spawned_future_key(&self) -> SpawnedFutureKey {
+        self.fut_key.clone()
+    }
 }
 
 impl<T: Copy> Observable<T> {

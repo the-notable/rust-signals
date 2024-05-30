@@ -526,7 +526,7 @@ mod mutable_btree_map {
     use futures_util::stream::StreamExt;
 
     use crate::signal_vec::{SignalVec, VecDiff};
-    use crate::store::SpawnedFutKey;
+    use crate::store::SpawnedFutureKey;
     use crate::traits::{HasSignalMap, HasSignalMapCloned, Provider};
 
     use super::{MapDiff, SignalMap, SignalMapExt};
@@ -862,7 +862,7 @@ mod mutable_btree_map {
     }
 
     impl<K, V> Provider for MutableBTreeMap<K, V> {
-        fn fut_key(&self) -> Option<SpawnedFutKey> {
+        fn fut_key(&self) -> Option<SpawnedFutureKey> {
             None
         }
     }
@@ -1071,7 +1071,7 @@ mod mutable_btree_map {
         use std::future::Future;
 
         use crate::signal_map::{MapDiff, MutableBTreeMapLockMut, MutableSignalMap};
-        use crate::store::{SpawnedFutKey, StoreArcMutexGuard};
+        use crate::store::{SpawnedFutureKey, StoreArcMutexGuard};
         use crate::traits::{HasSignalMap, HasSignalMapCloned, IsObservable, ObserveMap, ObserveMapCloned, Provider};
 
         use super::{MutableBTreeMap, MutableBTreeMapLockRef};
@@ -1083,11 +1083,11 @@ mod mutable_btree_map {
         #[derive(Debug)]
         pub struct ObservableBTreeMap<K, V> {
             map: MutableBTreeMap<K, V>,
-            fut_key: SpawnedFutKey
+            fut_key: SpawnedFutureKey
         }
 
         impl<K, V> Provider for ObservableBTreeMap<K, V> {
-            fn fut_key(&self) -> Option<SpawnedFutKey> {
+            fn fut_key(&self) -> Option<SpawnedFutureKey> {
                 Some(self.fut_key)
             }
         }
@@ -1119,7 +1119,7 @@ mod mutable_btree_map {
                 MutableBTreeMap::new()
             }
 
-            fn new(inner: Self::Inner, fut_key: SpawnedFutKey) -> Self {
+            fn new(inner: Self::Inner, fut_key: SpawnedFutureKey) -> Self {
                 Self {
                     map: inner,
                     fut_key,
