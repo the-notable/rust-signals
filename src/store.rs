@@ -7,6 +7,7 @@ use parking_lot::lock_api::ArcMutexGuard;
 use slotmap::{new_key_type, SlotMap};
 use state::TypeMap;
 use tokio::{select, spawn};
+use tokio::runtime::{Builder, Runtime};
 use tokio_util::sync::CancellationToken;
 
 use crate::observable::Observable;
@@ -44,8 +45,9 @@ impl RxStoreManager {
     ///
     /// Returned ArcMutexGuard needs to be dropped when done with.
     /// Don't go passing it around causing deadlocks and such.
-    pub(crate) fn get_store(&self) -> StoreArcMutexGuard {
-        self.0.lock_arc()
+    pub fn get_store(&self) -> StoreArcMutexGuard {
+        let inner = &self.0;
+        inner.lock_arc()
     }
 
     pub(crate) fn get_store_ptr(&self) -> StorePtr {
@@ -63,7 +65,8 @@ impl RxStoreManager {
     ///
     /// This function does not block.
     pub fn try_get_store(&self) -> Option<StoreArcMutexGuard> {
-        self.0.try_lock_arc()
+        let inner = &self.0;
+        inner.try_lock_arc()
     }
 
     /// Attempts to acquire this lock through an `Arc` until a timeout is reached.
@@ -78,7 +81,8 @@ impl RxStoreManager {
     /// Returned ArcMutexGuard needs to be dropped when done with.
     /// Don't go passing it around causing deadlocks and such.
     pub fn try_get_store_timeout(&self, duration: Duration) -> Option<StoreArcMutexGuard> {
-        self.0.try_lock_arc_for(duration)
+        let inner = &self.0;
+        inner.try_lock_arc_for(duration)
     }
 
     pub fn get_child_cancellation_token<S>(&self, source: &S) -> Result<CancellationToken, &'static str>
@@ -96,7 +100,7 @@ impl RxStoreManager {
             T: Copy,
             S: HasSpawnedFutureKey + HasSignal<T> + Clone,
             <S as HasSignal<T>>::Return: Signal + Send + 'static,
-            F: Fn(<<S as HasSignal<T>>::Return as Signal>::Item) -> () + Send + 'static
+            F: Fn(<<S as HasSignal<T>>::Return as Signal>::Item) + Send + 'static
     {
         let source_cloned = source.clone();
         let fut = source_cloned.signal().for_each(move |v| {
@@ -175,6 +179,7 @@ impl RxStoreManager {
 
 #[derive(Debug)]
 pub struct RxStore {
+    rt: Runtime,
     stored: TypeMap![Send + Sync],
     spawned_futs: SlotMap<SpawnedFutureKey, CancellationToken>
 }
@@ -182,7 +187,11 @@ pub struct RxStore {
 impl RxStore {
 
     fn new() -> Self {
+        let rt = Builder::new_multi_thread()
+            .build()
+            .unwrap();
         Self {
+            rt,
             stored: <TypeMap![Send + Sync]>::new(),
             spawned_futs: SlotMap::default()
         }
@@ -193,14 +202,14 @@ impl RxStore {
     // }
 
     pub fn set<T: Send + Sync + 'static>(&self, v: T) -> bool {
-        self.stored.set(v)
+        self.stored.set(Arc::new(v))
     }
 
     // pub fn set_node<T, U>(&self, v: T) -> bool where T: Send + Sync + Into<NodeType<U>> + 'static {
     //     self.stored.set(v)
     // }
 
-    pub fn get<T: Send + Sync + 'static>(&self) -> &T {
+    pub fn get<T: Send + Sync + 'static>(&self) -> &Arc<T> {
         self
             .stored
             .try_get()
@@ -219,15 +228,14 @@ impl RxStore {
         };
 
         let cloned_token = token.clone();
-        let h = spawn(async move {
+        let h = self.rt.spawn(async move {
             select! {
                 _ = cloned_token.cancelled() => {}
                 _ = f => {}
             }
         });
 
-        let key = self.spawned_futs.insert(token);
-        key
+        self.spawned_futs.insert(token)
     }
 
     pub(crate) fn clean_up(&mut self, s: SpawnedFutureKey) {
@@ -238,6 +246,7 @@ impl RxStore {
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
     use std::time::Duration;
 
     use crate::store::{RxStore, RxStoreManager};
@@ -277,7 +286,7 @@ mod tests {
         let one_a = TestTypeOne(50);
         s.set(one_a);
         let one_b = s.get::<TestTypeOne>();
-        assert_eq!(one_a, *one_b)
+        assert_eq!(one_a, **one_b)
     }
 
     #[test]
@@ -287,21 +296,21 @@ mod tests {
         assert_eq!(mutable.get(), 50)
     }
 
-    #[tokio::test]
-    async fn it_derives_observable_from_mutable() {
+    #[test]
+    fn it_derives_observable_from_mutable() {
         let store = RxStoreManager::new();
         let mutable = store.create_mutable(50);
         let mutable_clone = mutable.clone();
         let observable = store.derive_observable(&*mutable_clone, |source| source + 20 );
         mutable.set(100);
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        thread::sleep(Duration::from_millis(500));
 
         assert_eq!(observable.get(), 120)
     }
 
-    #[tokio::test]
-    async fn it_derives_observable_cloned_from_mutable() {
+    #[test]
+    fn it_derives_observable_cloned_from_mutable() {
         let store = RxStoreManager::new();
         let mutable = store.create_mutable("hello".to_string());
         let mutable_clone = mutable.clone();
@@ -310,13 +319,13 @@ mod tests {
         });
         mutable.set(format!("{} there", mutable.get_cloned()));
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        thread::sleep(Duration::from_millis(500));
 
         assert_eq!(observable.get_cloned(), "hello there, general kenobi".to_string())
     }
 
-    #[tokio::test]
-    async fn it_derives_observable_from_observable() {
+    #[test]
+    fn it_derives_observable_from_observable() {
         let store = RxStoreManager::new();
         let mutable = store.create_mutable(50);
         let mutable_clone = mutable.clone();
@@ -324,12 +333,12 @@ mod tests {
         let observable_two = store.derive_observable(&observable_one, |source| source + 30);
 
         mutable.set(100);
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        thread::sleep(Duration::from_millis(500));
         assert_eq!(observable_two.get(), 150);
     }
 
-    #[tokio::test]
-    async fn it_derives_observable_cloned_from_observable() {
+    #[test]
+    fn it_derives_observable_cloned_from_observable() {
         let store = RxStoreManager::new();
         let mutable = store.create_mutable("hello".to_string());
         let mutable_clone = mutable.clone();
@@ -341,7 +350,8 @@ mod tests {
         });
 
         mutable.set(format!("{} there", mutable.get_cloned()));
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        // tokio::time::sleep(Duration::from_millis(500)).await;
+        thread::sleep(Duration::from_millis(500));
         assert_eq!(observable_two.get_cloned(), "hello there, general kenobi, nice to see you".to_string())
     }
 }

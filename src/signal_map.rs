@@ -1178,6 +1178,7 @@ mod mutable_btree_map {
 
         #[cfg(test)]
         mod tests {
+            use std::thread;
             use std::time::Duration;
 
             use crate::signal_map::{MapDiff, MutableBTreeMap};
@@ -1185,8 +1186,8 @@ mod mutable_btree_map {
             use crate::signal_map::SignalMapExt;
             use crate::store::RxStoreManager;
 
-            #[tokio::test]
-            async fn it_observes_map_cloned() {
+            #[test]
+            fn it_observes_map_cloned() {
                 let store = RxStoreManager::new();
                 let map = MutableBTreeMap::new();
                 let map_clone = map.clone();
@@ -1229,13 +1230,13 @@ mod mutable_btree_map {
                     lock.insert_cloned("three".to_owned(), 3);
                     lock.insert_cloned("four".to_owned(), 4);
                 }
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                thread::sleep(Duration::from_millis(500));
 
                 assert_eq!(obsv_map.lock_ref().get(&4).unwrap(), &"four".to_string());
             }
 
-            #[tokio::test]
-            async fn it_clears_observable_map() {
+            #[test]
+            fn it_clears_observable_map() {
                 let store = RxStoreManager::new();
                 let map = MutableBTreeMap::new();
                 let map_clone = map.clone();
@@ -1259,13 +1260,13 @@ mod mutable_btree_map {
                     let mut lock = map.lock_mut();
                     lock.clear();
                 }
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                thread::sleep(Duration::from_millis(500));
 
                 assert!(obsv_map.lock_ref().is_empty());
             }
             
-            #[tokio::test]
-            async fn it_removes_from_observable_map() {
+            #[test]
+            fn it_removes_from_observable_map() {
                 let store = RxStoreManager::new();
                 let map = MutableBTreeMap::new();
                 let map_clone = map.clone();
@@ -1289,13 +1290,13 @@ mod mutable_btree_map {
                     let mut lock = map.lock_mut();
                     lock.remove(&1);
                 }
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                thread::sleep(Duration::from_millis(500));
 
                 assert!(obsv_map.lock_ref().get(&1).is_none());
             }
 
-            #[tokio::test]
-            async fn it_observes_observable_map() {
+            #[test]
+            fn it_observes_observable_map() {
                 let store = RxStoreManager::new();
                 let map = MutableBTreeMap::new();
                 let map_clone = map.clone();
@@ -1315,8 +1316,8 @@ mod mutable_btree_map {
                     }
                 );
 
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                
+                thread::sleep(Duration::from_millis(500));
+
                 let obsv_map_one_clone = obsv_map_one.clone();
                 let obsv_map_two = ObservableBTreeMap::observe_map(
                     obsv_map_one_clone,
@@ -1335,7 +1336,7 @@ mod mutable_btree_map {
                     lock.insert(4, 4);
                 }
 
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                thread::sleep(Duration::from_millis(500));
 
                 obsv_map_two.lock_ref().iter().for_each(|(k, v)| {
                     println!("k: {}, v: {}", k, v);
