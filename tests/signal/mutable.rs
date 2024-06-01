@@ -1,13 +1,15 @@
 use std::task::Poll;
 use rx_store::cancelable_future;
 use rx_store::signal::{SignalExt, Mutable, channel};
+use rx_store::store::{Manager, Store};
 use rx_store::traits::{HasSignal, HasSignalCloned};
 use crate::util;
 
 
 #[test]
 fn test_mutable() {
-    let mutable = Mutable::new(1);
+    let store = Store::new();
+    let mutable = store.create_mutable(1);
     let mut s1 = mutable.signal();
     let mut s2 = mutable.signal_cloned();
 
@@ -31,8 +33,11 @@ fn test_mutable() {
 
 #[test]
 fn test_mutable_drop() {
+
+    let store = Store::new();
+    
     {
-        let mutable = Mutable::new(1);
+        let mutable = store.create_mutable(1);
         let mut s1 = mutable.signal();
         let mut s2 = mutable.signal_cloned();
         drop(mutable);
@@ -46,7 +51,7 @@ fn test_mutable_drop() {
     }
 
     {
-        let mutable = Mutable::new(1);
+        let mutable = store.create_mutable(1);
         let mut s1 = mutable.signal();
         let mut s2 = mutable.signal_cloned();
 
@@ -67,7 +72,7 @@ fn test_mutable_drop() {
     }
 
     {
-        let mutable = Mutable::new(1);
+        let mutable = store.create_mutable(1);
         let mut s1 = mutable.signal();
         let mut s2 = mutable.signal_cloned();
 
@@ -92,13 +97,15 @@ fn test_mutable_drop() {
 
 #[test]
 fn test_send_sync() {
+    let store = Store::new();
+    
     let a = cancelable_future(async {}, || ());
     let _: Box<dyn Send + Sync> = Box::new(a.0);
     let _: Box<dyn Send + Sync> = Box::new(a.1);
 
-    let _: Box<dyn Send + Sync> = Box::new(Mutable::new(1));
-    let _: Box<dyn Send + Sync> = Box::new(Mutable::new(1).signal());
-    let _: Box<dyn Send + Sync> = Box::new(Mutable::new(1).signal_cloned());
+    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable(1));
+    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable(1).signal());
+    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable(1).signal_cloned());
 
     let a = channel(1);
     let _: Box<dyn Send + Sync> = Box::new(a.0);
@@ -108,8 +115,10 @@ fn test_send_sync() {
 // Verifies that lock_mut only notifies when it is mutated
 #[test]
 fn test_lock_mut() {
+    let store = Store::new();
+    
     {
-        let m = Mutable::new(1);
+        let m = store.create_mutable(1);
 
         let polls = util::get_signal_polls(m.signal(), move || {
             let mut lock = m.lock_mut();
@@ -127,7 +136,7 @@ fn test_lock_mut() {
     }
 
     {
-        let m = Mutable::new(1);
+        let m = store.create_mutable(1);
 
         let polls = util::get_signal_polls(m.signal(), move || {
             let mut lock = m.lock_mut();
@@ -198,11 +207,13 @@ fn test_lock_mut_signal() {
     });
 }*/
 
-#[test]
-fn is_from_t(){
-    let src = 0;
-    let _out: Mutable<u8> = Mutable::from(src);
-
-    let src = 0;
-    let _out: Mutable<u8> = src.into();
-}
+// #[test]
+// fn is_from_t(){
+//     let store = Store::new();
+//     
+//     let src = 0;
+//     let _out: Mutable<u8> = store.create_mutable(src);
+// 
+//     let src = 0;
+//     let _out: Mutable<u8> = src.into();
+// }

@@ -532,13 +532,13 @@ pub trait SignalVecExt: SignalVec {
         }
     }
 
-    #[inline]
-    fn enumerate(self) -> Enumerate<Self> where Self: Sized {
-        Enumerate {
-            signal: self,
-            mutables: vec![],
-        }
-    }
+    // #[inline]
+    // fn enumerate(self) -> Enumerate<Self> where Self: Sized {
+    //     Enumerate {
+    //         signal: self,
+    //         mutables: vec![],
+    //     }
+    // }
 
     #[inline]
     fn delay_remove<A, F>(self, f: F) -> DelayRemove<Self, A, F>
@@ -1327,133 +1327,133 @@ impl<A, B, F> Signal for ToSignalMap<A, F>
 }
 
 
-#[pin_project(project = EnumerateProj)]
-#[derive(Debug)]
-#[must_use = "SignalVecs do nothing unless polled"]
-pub struct Enumerate<A> {
-    #[pin]
-    signal: A,
-    mutables: Vec<Mutable<Option<usize>>>,
-}
-
-impl<A> SignalVec for Enumerate<A> where A: SignalVec {
-    type Item = (ReadOnlyMutable<Option<usize>>, A::Item);
-
-    #[inline]
-    fn poll_vec_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<VecDiff<Self::Item>>> {
-        fn increment_indexes(range: &[Mutable<Option<usize>>]) {
-            for mutable in range {
-                mutable.replace_with(|value| value.map(|value| value + 1));
-            }
-        }
-
-        fn decrement_indexes(range: &[Mutable<Option<usize>>]) {
-            for mutable in range {
-                mutable.replace_with(|value| value.map(|value| value - 1));
-            }
-        }
-
-        let EnumerateProj { signal, mutables } = self.project();
-
-        // TODO use map ?
-        match signal.poll_vec_change(cx) {
-            Poll::Ready(Some(change)) => Poll::Ready(Some(match change {
-                VecDiff::Replace { values } => {
-                    for mutable in mutables.drain(..) {
-                        // TODO use set_neq ?
-                        mutable.set(None);
-                    }
-
-                    *mutables = Vec::with_capacity(values.len());
-
-                    VecDiff::Replace {
-                        values: values.into_iter().enumerate().map(|(index, value)| {
-                            let mutable = Mutable::new(Some(index));
-                            let read_only = mutable.read_only();
-                            mutables.push(mutable);
-                            (read_only, value)
-                        }).collect()
-                    }
-                },
-
-                VecDiff::InsertAt { index, value } => {
-                    let mutable = Mutable::new(Some(index));
-                    let read_only = mutable.read_only();
-
-                    mutables.insert(index, mutable);
-
-                    increment_indexes(&mutables[(index + 1)..]);
-
-                    VecDiff::InsertAt { index, value: (read_only, value) }
-                },
-
-                VecDiff::UpdateAt { index, value } => {
-                    VecDiff::UpdateAt { index, value: (mutables[index].read_only(), value) }
-                },
-
-                VecDiff::Push { value } => {
-                    let mutable = Mutable::new(Some(mutables.len()));
-                    let read_only = mutable.read_only();
-
-                    mutables.push(mutable);
-
-                    VecDiff::Push { value: (read_only, value) }
-                },
-
-                VecDiff::Move { old_index, new_index } => {
-                    let mutable = mutables.remove(old_index);
-
-                    // TODO figure out a way to avoid this clone ?
-                    mutables.insert(new_index, mutable.clone());
-
-                    // TODO test this
-                    if old_index < new_index {
-                        decrement_indexes(&mutables[old_index..new_index]);
-
-                    } else if new_index < old_index {
-                        increment_indexes(&mutables[(new_index + 1)..(old_index + 1)]);
-                    }
-
-                    // TODO use set_neq ?
-                    mutable.set(Some(new_index));
-
-                    VecDiff::Move { old_index, new_index }
-                },
-
-                VecDiff::RemoveAt { index } => {
-                    let mutable = mutables.remove(index);
-
-                    decrement_indexes(&mutables[index..]);
-
-                    // TODO use set_neq ?
-                    mutable.set(None);
-
-                    VecDiff::RemoveAt { index }
-                },
-
-                VecDiff::Pop {} => {
-                    let mutable = mutables.pop().unwrap();
-
-                    // TODO use set_neq ?
-                    mutable.set(None);
-
-                    VecDiff::Pop {}
-                },
-
-                VecDiff::Clear {} => {
-                    for mutable in mutables.drain(..) {
-                        // TODO use set_neq ?
-                        mutable.set(None);
-                    }
-
-                    VecDiff::Clear {}
-                },
-            })),
-            Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending => Poll::Pending,
-        }
-    }
-}
+// #[pin_project(project = EnumerateProj)]
+// #[derive(Debug)]
+// #[must_use = "SignalVecs do nothing unless polled"]
+// pub struct Enumerate<A> {
+//     #[pin]
+//     signal: A,
+//     mutables: Vec<Mutable<Option<usize>>>,
+// }
+// 
+// impl<A> SignalVec for Enumerate<A> where A: SignalVec {
+//     type Item = (ReadOnlyMutable<Option<usize>>, A::Item);
+// 
+//     #[inline]
+//     fn poll_vec_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<VecDiff<Self::Item>>> {
+//         fn increment_indexes(range: &[Mutable<Option<usize>>]) {
+//             for mutable in range {
+//                 mutable.replace_with(|value| value.map(|value| value + 1));
+//             }
+//         }
+// 
+//         fn decrement_indexes(range: &[Mutable<Option<usize>>]) {
+//             for mutable in range {
+//                 mutable.replace_with(|value| value.map(|value| value - 1));
+//             }
+//         }
+// 
+//         let EnumerateProj { signal, mutables } = self.project();
+// 
+//         // TODO use map ?
+//         match signal.poll_vec_change(cx) {
+//             Poll::Ready(Some(change)) => Poll::Ready(Some(match change {
+//                 VecDiff::Replace { values } => {
+//                     for mutable in mutables.drain(..) {
+//                         // TODO use set_neq ?
+//                         mutable.set(None);
+//                     }
+// 
+//                     *mutables = Vec::with_capacity(values.len());
+// 
+//                     VecDiff::Replace {
+//                         values: values.into_iter().enumerate().map(|(index, value)| {
+//                             let mutable = Mutable::new(Some(index));
+//                             let read_only = mutable.read_only();
+//                             mutables.push(mutable);
+//                             (read_only, value)
+//                         }).collect()
+//                     }
+//                 },
+// 
+//                 VecDiff::InsertAt { index, value } => {
+//                     let mutable = Mutable::new(Some(index));
+//                     let read_only = mutable.read_only();
+// 
+//                     mutables.insert(index, mutable);
+// 
+//                     increment_indexes(&mutables[(index + 1)..]);
+// 
+//                     VecDiff::InsertAt { index, value: (read_only, value) }
+//                 },
+// 
+//                 VecDiff::UpdateAt { index, value } => {
+//                     VecDiff::UpdateAt { index, value: (mutables[index].read_only(), value) }
+//                 },
+// 
+//                 VecDiff::Push { value } => {
+//                     let mutable = Mutable::new(Some(mutables.len()));
+//                     let read_only = mutable.read_only();
+// 
+//                     mutables.push(mutable);
+// 
+//                     VecDiff::Push { value: (read_only, value) }
+//                 },
+// 
+//                 VecDiff::Move { old_index, new_index } => {
+//                     let mutable = mutables.remove(old_index);
+// 
+//                     // TODO figure out a way to avoid this clone ?
+//                     mutables.insert(new_index, mutable.clone());
+// 
+//                     // TODO test this
+//                     if old_index < new_index {
+//                         decrement_indexes(&mutables[old_index..new_index]);
+// 
+//                     } else if new_index < old_index {
+//                         increment_indexes(&mutables[(new_index + 1)..(old_index + 1)]);
+//                     }
+// 
+//                     // TODO use set_neq ?
+//                     mutable.set(Some(new_index));
+// 
+//                     VecDiff::Move { old_index, new_index }
+//                 },
+// 
+//                 VecDiff::RemoveAt { index } => {
+//                     let mutable = mutables.remove(index);
+// 
+//                     decrement_indexes(&mutables[index..]);
+// 
+//                     // TODO use set_neq ?
+//                     mutable.set(None);
+// 
+//                     VecDiff::RemoveAt { index }
+//                 },
+// 
+//                 VecDiff::Pop {} => {
+//                     let mutable = mutables.pop().unwrap();
+// 
+//                     // TODO use set_neq ?
+//                     mutable.set(None);
+// 
+//                     VecDiff::Pop {}
+//                 },
+// 
+//                 VecDiff::Clear {} => {
+//                     for mutable in mutables.drain(..) {
+//                         // TODO use set_neq ?
+//                         mutable.set(None);
+//                     }
+// 
+//                     VecDiff::Clear {}
+//                 },
+//             })),
+//             Poll::Ready(None) => Poll::Ready(None),
+//             Poll::Pending => Poll::Pending,
+//         }
+//     }
+// }
 
 
 // This is an optimization to allow a SignalVec to efficiently "return" multiple VecDiff
@@ -2790,6 +2790,7 @@ mod mutable_vec {
     use std::task::{Poll, Context};
     use futures_channel::mpsc;
     use futures_util::stream::StreamExt;
+    use crate::store::StoreHandle;
 
 
     // TODO replace with std::slice::range after it stabilizes
@@ -3363,30 +3364,40 @@ mod mutable_vec {
 
     // TODO get rid of the Arc
     // TODO impl some of the same traits as Vec
-    pub struct MutableVec<A>(Arc<RwLock<MutableVecState<A>>>);
+    pub struct MutableVec<A> {
+        store_handle: StoreHandle,
+        state: Arc<RwLock<MutableVecState<A>>> 
+    }
 
     impl<A> MutableVec<A> {
         // TODO deprecate this and replace with with_values ?
         #[inline]
-        pub fn new_with_values(values: Vec<A>) -> Self {
-            Self::from(values)
+        pub fn new_with_values(values: Vec<A>, store_handle: StoreHandle) -> Self {
+            let state = Arc::new(RwLock::new(MutableVecState {                 
+                values: values.into(),
+                senders: vec![],
+            }));
+            Self {
+                store_handle,
+                state
+            }
         }
 
         #[inline]
-        pub fn new() -> Self {
-            Self::new_with_values(vec![])
+        pub fn new(store_handle: StoreHandle) -> Self {
+            Self::new_with_values(vec![], store_handle)
         }
 
         #[inline]
-        pub fn with_capacity(capacity: usize) -> Self {
-            Self::new_with_values(Vec::with_capacity(capacity))
+        pub fn with_capacity(capacity: usize, store_handle: StoreHandle) -> Self {
+            Self::new_with_values(Vec::with_capacity(capacity), store_handle)
         }
 
         // TODO return Result ?
         #[inline]
         pub fn lock_ref(&self) -> MutableVecLockRef<A> {
             MutableVecLockRef {
-                lock: self.0.read().unwrap(),
+                lock: self.state.read().unwrap(),
             }
         }
 
@@ -3394,38 +3405,38 @@ mod mutable_vec {
         #[inline]
         pub fn lock_mut(&self) -> MutableVecLockMut<A> {
             MutableVecLockMut {
-                lock: self.0.write().unwrap(),
+                lock: self.state.write().unwrap(),
             }
         }
     }
 
-    impl<T, A> From<T> for MutableVec<A> where Vec<A>: From<T> {
-        #[inline]
-        fn from(values: T) -> Self {
-            MutableVec(Arc::new(RwLock::new(MutableVecState {
-                values: values.into(),
-                senders: vec![],
-            })))
-        }
-    }
+    // impl<T, A> From<T> for MutableVec<A> where Vec<A>: From<T> {
+    //     #[inline]
+    //     fn from(values: T) -> Self {
+    //         MutableVec(Arc::new(RwLock::new(MutableVecState {
+    //             values: values.into(),
+    //             senders: vec![],
+    //         })))
+    //     }
+    // }
 
     impl<A: Copy> MutableVec<A> {
         #[inline]
         pub fn signal_vec(&self) -> MutableSignalVec<A> {
-            self.0.write().unwrap().signal_vec_copy()
+            self.state.write().unwrap().signal_vec_copy()
         }
     }
 
     impl<A: Clone> MutableVec<A> {
         #[inline]
         pub fn signal_vec_cloned(&self) -> MutableSignalVec<A> {
-            self.0.write().unwrap().signal_vec_clone()
+            self.state.write().unwrap().signal_vec_clone()
         }
     }
 
     impl<A> fmt::Debug for MutableVec<A> where A: fmt::Debug {
         fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-            let state = self.0.read().unwrap();
+            let state = self.state.read().unwrap();
 
             fmt.debug_tuple("MutableVec")
                 .field(&state.values)
@@ -3437,29 +3448,32 @@ mod mutable_vec {
     impl<T> serde::Serialize for MutableVec<T> where T: serde::Serialize {
         #[inline]
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
-            self.0.read().unwrap().values.serialize(serializer)
+            self.state.read().unwrap().values.serialize(serializer)
         }
     }
 
-    #[cfg(feature = "serde")]
-    impl<'de, T> serde::Deserialize<'de> for MutableVec<T> where T: serde::Deserialize<'de> {
-        #[inline]
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: serde::Deserializer<'de> {
-            <Vec<T>>::deserialize(deserializer).map(MutableVec::new_with_values)
-        }
-    }
+    // #[cfg(feature = "serde")]
+    // impl<'de, T> serde::Deserialize<'de> for MutableVec<T> where T: serde::Deserialize<'de> {
+    //     #[inline]
+    //     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: serde::Deserializer<'de> {
+    //         <Vec<T>>::deserialize(deserializer).map(MutableVec::new_with_values)
+    //     }
+    // }
 
-    impl<T> Default for MutableVec<T> {
-        #[inline]
-        fn default() -> Self {
-            MutableVec::new()
-        }
-    }
+    // impl<T> Default for MutableVec<T> {
+    //     #[inline]
+    //     fn default() -> Self {
+    //         MutableVec::new()
+    //     }
+    // }
 
     impl<T> Clone for MutableVec<T> {
         #[inline]
         fn clone(&self) -> Self {
-            MutableVec(self.0.clone())
+            Self {
+                store_handle: self.store_handle.clone(),
+                state: self.state.clone()
+            }
         }
     }
 

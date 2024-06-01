@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -6,14 +7,14 @@ use parking_lot::{Mutex, RawMutex};
 use parking_lot::lock_api::ArcMutexGuard;
 use slotmap::{new_key_type, SlotMap};
 use state::TypeMap;
-use tokio::{select, spawn};
-use tokio::runtime::{Builder, Runtime};
+use tokio::runtime::{Builder, Handle, Runtime};
+use tokio::select;
 use tokio_util::sync::CancellationToken;
 
-use crate::observable::Observable;
 use crate::signal::{Mutable, Signal};
 use crate::signal::SignalExt;
-use crate::traits::{HasSignal, HasSignalCloned, HasSpawnedFutureKey, SSS};
+use crate::signal_vec::MutableVec;
+use crate::traits::{HasSignal, HasSpawnedFutureKey, HasStoreHandle, SSS};
 
 new_key_type! {
     pub struct SpawnedFutureKey;
@@ -21,6 +22,222 @@ new_key_type! {
 
 pub(crate) type StorePtr = Arc<Mutex<RxStore>>;
 pub(crate) type StoreArcMutexGuard = ArcMutexGuard<RawMutex, RxStore>;
+
+pub trait Manager: HasStoreHandle {
+    fn create_mutable<T: 'static>(&self, v: T) -> Mutable<T> {
+        let store_handle = self.store_handle().clone();
+        Mutable::new(v, store_handle)
+    }
+    
+    fn create_mutable_vec<T>(&self) -> MutableVec<T> {
+        MutableVec::new(self.store_handle().clone())
+    }
+
+    fn create_mutable_vec_w_values<T>(&self, v: Vec<T>) -> MutableVec<T> {
+        MutableVec::new_with_values(v, self.store_handle().clone())
+    }
+
+    fn create_mutable_vec_w_capacity<T>(&self, capacity: usize) -> MutableVec<T> {
+        MutableVec::with_capacity(capacity, self.store_handle().clone())
+    }
+}
+
+pub(crate) trait StoreAccess {    
+    
+    fn rt(&self) -> &Handle;
+    
+    fn get_inner(&self) -> &Arc<Mutex<StoreInner>>;
+
+    /// Attempts to acquire a lock through an `Arc`.
+    ///
+    /// This function will block the local thread until it is available to acquire
+    /// the mutex. Upon returning, the thread is the only thread with the mutex
+    /// held. An RAII guard is returned to allow scoped unlock of the lock. When
+    /// the guard goes out of scope, the mutex will be unlocked.
+    ///
+    /// This method requires the `Mutex` to be inside of an `Arc` and the resulting
+    /// mutex guard has no lifetime requirements.
+    ///
+    /// Returned ArcMutexGuard needs to be dropped when done with.
+    /// Don't go passing it around causing deadlocks and such.
+    fn get_store(&self) -> ArcMutexGuard<RawMutex, StoreInner> {
+        let inner = self.get_inner();
+        inner.lock_arc()
+    }
+
+    // fn get_store_ptr(&self) -> StorePtr {
+    //     self.0.clone()
+    // }
+
+    /// Attempts to acquire a lock through an `Arc`.
+    ///
+    /// If the lock could not be acquired at this time, then `None` is returned.
+    /// Otherwise, an RAII guard is returned. The lock will be unlocked when the
+    /// guard is dropped.
+    ///
+    /// This method requires the `Mutex` to be inside of an
+    /// `Arc` and the resulting mutex guard has no lifetime requirements.
+    ///
+    /// This function does not block.
+    fn try_get_store(&self) -> Option<ArcMutexGuard<RawMutex, StoreInner>> {
+        let inner = self.get_inner();
+        inner.try_lock_arc()
+    }
+
+    /// Attempts to acquire this lock through an `Arc` until a timeout is reached.
+    ///
+    /// If the lock could not be acquired before the timeout expired, then
+    /// `None` is returned. Otherwise, an RAII guard is returned. The lock will
+    /// be unlocked when the guard is dropped.
+    ///
+    /// This method requires the `Mutex` to be inside of an
+    /// `Arc` and the resulting mutex guard has no lifetime requirements.
+    ///
+    /// Returned ArcMutexGuard needs to be dropped when done with.
+    /// Don't go passing it around causing deadlocks and such.
+    fn try_get_store_timeout(&self, duration: Duration) -> Option<ArcMutexGuard<RawMutex, StoreInner>> {
+        let inner = self.get_inner();
+        inner.try_lock_arc_for(duration)
+    }
+    
+    fn spawn_fut<F>(&mut self, provider_key: Option<SpawnedFutureKey>, f: F)
+                               -> SpawnedFutureKey
+        where
+            F: Future<Output = ()> + Send + 'static
+    {
+        let mut lock = self.get_store();
+        let token = if let Some(p) = provider_key {
+            lock.spawned_futs.get(p).unwrap().child_token()
+        } else {
+            CancellationToken::new()
+        };
+
+        let cloned_token = token.clone();
+        let h = self.rt().spawn(async move {
+            select! {
+                _ = cloned_token.cancelled() => {}
+                _ = f => {}
+            }
+        });
+
+        lock.spawned_futs.insert(token)
+    }
+}
+
+#[derive(Debug)]
+pub struct Store {
+    rt: Runtime,
+    store: Arc<Mutex<StoreInner>>,
+    handle: StoreHandle
+}
+
+impl Store {
+    pub fn new() -> Store {
+        let rt = Builder::new_multi_thread()
+            .build()
+            .unwrap();
+        
+        let store = Arc::new(Mutex::new(StoreInner::new()));
+        let handle = StoreHandle::new(rt.handle().clone(), store.clone());
+        Store {
+            rt,
+            store,
+            handle,
+        }
+    }
+    
+    // pub(crate) fn handle(&self) -> &StoreHandle {
+    //     &self.handle
+    // }
+}
+
+impl HasStoreHandle for Store {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.handle
+    }
+}
+
+impl Manager for Store {}
+
+impl StoreAccess for Store {
+    fn rt(&self) -> &Handle {
+        self.rt.handle()
+    }
+
+    fn get_inner(&self) -> &Arc<Mutex<StoreInner>> {
+        &self.store
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StoreInner {
+    stored: TypeMap![Send + Sync],
+    spawned_futs: SlotMap<SpawnedFutureKey, CancellationToken>
+}
+
+impl StoreInner {
+    fn new() -> Self {
+        Self {
+            stored: <TypeMap![Send + Sync]>::new(),
+            spawned_futs: SlotMap::default()
+        }
+    }
+
+    fn set<T: Send + Sync + 'static>(&self, v: T) -> bool {
+        self.stored.set(Arc::new(v))
+    }
+
+    fn get<T: Send + Sync + 'static>(&self) -> &Arc<T> {
+        self
+            .stored
+            .try_get()
+            .expect("state: get() called before set() for given type")
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StoreHandle {
+    rt: Handle,
+    store: Arc<Mutex<StoreInner>>
+}
+
+impl Clone for StoreHandle {
+    fn clone(&self) -> Self {
+        StoreHandle {
+            rt: self.rt.clone(),
+            store: self.store.clone()
+        }
+    }
+}
+
+impl StoreHandle {
+    pub(crate) fn new(rt: Handle, store: Arc<Mutex<StoreInner>>) -> Self {
+        Self {
+            rt,
+            store,
+        }
+    }
+}
+
+impl Manager for StoreHandle {}
+
+impl HasStoreHandle for StoreHandle {
+    fn store_handle(&self) -> &StoreHandle {
+        &self
+    }
+}
+
+impl StoreAccess for StoreHandle {
+    fn rt(&self) -> &Handle {
+        &self.rt
+    }
+
+    fn get_inner(&self) -> &Arc<Mutex<StoreInner>> {
+        &self.store
+    }
+}
+
+
 
 /// Controls access to internal store by controlling
 /// access to mutex lock
@@ -113,63 +330,63 @@ impl RxStoreManager {
         Ok(key)
     }
     
-    pub fn create_mutable<T: 'static>(&self, v: T) -> Mutable<T> {
-        Mutable::new(v)
-    }
+    // pub fn create_mutable<T: 'static>(&self, v: T) -> Mutable<T> {
+    //     Mutable::new(v)
+    // }
 
-    pub fn derive_observable<U, A, S, F>(
-        &self,
-        source: &S,
-        f: F
-    ) -> Observable<U>
-        where
-            A: Copy + Send + Sync + 'static,
-            U: Default + Send + Sync + 'static,
-            S: Clone + HasSignal<A> + Send + Sync + 'static,
-            <S as HasSignal<A>>::Return: crate::signal::Signal + Send + Sync + 'static,
-            F: Fn(<<S as HasSignal<A>>::Return as crate::signal::Signal>::Item) -> U + Send + Sync + 'static
-    {
-        let out = self.create_mutable(U::default());
-        let out_mutable_clone = out.clone();
-        let fut = source.signal().for_each(move |v| {
-            out_mutable_clone.set(f(v));
-            async {  }
-        });
+    // pub fn derive_observable<U, A, S, F>(
+    //     &self,
+    //     source: &S,
+    //     f: F
+    // ) -> Observable<U>
+    //     where
+    //         A: Copy + Send + Sync + 'static,
+    //         U: Default + Send + Sync + 'static,
+    //         S: Clone + HasSignal<A> + Send + Sync + 'static,
+    //         <S as HasSignal<A>>::Return: crate::signal::Signal + Send + Sync + 'static,
+    //         F: Fn(<<S as HasSignal<A>>::Return as crate::signal::Signal>::Item) -> U + Send + Sync + 'static
+    // {
+    //     let out = self.create_mutable(U::default());
+    //     let out_mutable_clone = out.clone();
+    //     let fut = source.signal().for_each(move |v| {
+    //         out_mutable_clone.set(f(v));
+    //         async {  }
+    //     });
+    // 
+    //     let mut lock = self.get_store();
+    //     let fut_key = lock.spawn_fut(None, fut);
+    //     Observable {
+    //         mutable: out,
+    //         fut_key
+    //     }
+    // }
 
-        let mut lock = self.get_store();
-        let fut_key = lock.spawn_fut(None, fut);
-        Observable {
-            mutable: out,
-            fut_key
-        }
-    }
-
-    pub fn derive_observable_cloned<U, A, S, F>(
-        &self,
-        source: &S,
-        f: F
-    ) -> Observable<U>
-        where
-            A: Clone + SSS,
-            U: Default + SSS,
-            S: Clone + HasSignalCloned<A> + SSS,
-            <S as HasSignalCloned<A>>::Return: crate::signal::Signal + SSS,
-            F: Fn(<<S as HasSignalCloned<A>>::Return as crate::signal::Signal>::Item) -> U + SSS
-    {
-        let out = self.create_mutable(U::default());
-        let out_mutable_clone = out.clone();
-        let fut = source.signal_cloned().for_each(move |v| {
-            out_mutable_clone.set(f(v));
-            async {  }
-        });
-
-        let mut lock = self.get_store();
-        let fut_key = lock.spawn_fut(None, fut);
-        Observable {
-            mutable: out,
-            fut_key
-        }
-    }
+    // pub fn derive_observable_cloned<U, A, S, F>(
+    //     &self,
+    //     source: &S,
+    //     f: F
+    // ) -> Observable<U>
+    //     where
+    //         A: Clone + SSS,
+    //         U: Default + SSS,
+    //         S: Clone + HasSignalCloned<A> + SSS,
+    //         <S as HasSignalCloned<A>>::Return: crate::signal::Signal + SSS,
+    //         F: Fn(<<S as HasSignalCloned<A>>::Return as crate::signal::Signal>::Item) -> U + SSS
+    // {
+    //     let out = self.create_mutable(U::default());
+    //     let out_mutable_clone = out.clone();
+    //     let fut = source.signal_cloned().for_each(move |v| {
+    //         out_mutable_clone.set(f(v));
+    //         async {  }
+    //     });
+    // 
+    //     let mut lock = self.get_store();
+    //     let fut_key = lock.spawn_fut(None, fut);
+    //     Observable {
+    //         mutable: out,
+    //         fut_key
+    //     }
+    // }
 }
 
 // pub enum ValueState<T> {
@@ -248,8 +465,9 @@ impl RxStore {
 mod tests {
     use std::thread;
     use std::time::Duration;
+    use crate::observable::{Observe, ObserveCloned};
 
-    use crate::store::{RxStore, RxStoreManager};
+    use crate::store::{Manager, RxStore, RxStoreManager, Store};
 
     #[test]
     fn it_gets_parking_lot_lock() {
@@ -291,17 +509,16 @@ mod tests {
 
     #[test]
     fn it_creates_mutable() {
-        let store = RxStoreManager::new();
+        let store = Store::new();
         let mutable = store.create_mutable(50);
         assert_eq!(mutable.get(), 50)
     }
 
     #[test]
     fn it_derives_observable_from_mutable() {
-        let store = RxStoreManager::new();
+        let store = Store::new();
         let mutable = store.create_mutable(50);
-        let mutable_clone = mutable.clone();
-        let observable = store.derive_observable(&*mutable_clone, |source| source + 20 );
+        let observable = mutable.observe(|source| source + 20 );
         mutable.set(100);
 
         thread::sleep(Duration::from_millis(500));
@@ -311,10 +528,9 @@ mod tests {
 
     #[test]
     fn it_derives_observable_cloned_from_mutable() {
-        let store = RxStoreManager::new();
+        let store = Store::new();
         let mutable = store.create_mutable("hello".to_string());
-        let mutable_clone = mutable.clone();
-        let observable = store.derive_observable_cloned(&*mutable_clone, |source| {
+        let observable = mutable.observe_cloned(|source| {
             format!("{}, general kenobi", source)
         });
         mutable.set(format!("{} there", mutable.get_cloned()));
@@ -326,11 +542,10 @@ mod tests {
 
     #[test]
     fn it_derives_observable_from_observable() {
-        let store = RxStoreManager::new();
+        let store = Store::new();
         let mutable = store.create_mutable(50);
-        let mutable_clone = mutable.clone();
-        let observable_one = store.derive_observable(&*mutable_clone, |source| source + 20);
-        let observable_two = store.derive_observable(&observable_one, |source| source + 30);
+        let observable_one = mutable.observe(|source| source + 20);
+        let observable_two = observable_one.observe(|source| source + 30);
 
         mutable.set(100);
         thread::sleep(Duration::from_millis(500));
@@ -339,18 +554,16 @@ mod tests {
 
     #[test]
     fn it_derives_observable_cloned_from_observable() {
-        let store = RxStoreManager::new();
+        let store = Store::new();
         let mutable = store.create_mutable("hello".to_string());
-        let mutable_clone = mutable.clone();
-        let observable_one = store.derive_observable_cloned(&*mutable_clone, |source| {
+        let observable_one = mutable.observe_cloned(|source| {
             format!("{}, general kenobi", source)
         });
-        let observable_two = store.derive_observable_cloned(&observable_one, |source| {
+        let observable_two = observable_one.observe_cloned(|source| {
             format!("{}, nice to see you", source)
         });
 
         mutable.set(format!("{} there", mutable.get_cloned()));
-        // tokio::time::sleep(Duration::from_millis(500)).await;
         thread::sleep(Duration::from_millis(500));
         assert_eq!(observable_two.get_cloned(), "hello there, general kenobi, nice to see you".to_string())
     }

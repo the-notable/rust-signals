@@ -1,18 +1,21 @@
 use std::task::Poll;
 use rx_store::signal_vec::{MutableVec, SignalVecExt, VecDiff, from_stream};
+use rx_store::store::{Manager, Store};
 
 mod util;
 
 
 #[test]
 fn sync() {
-    let _: Box<dyn Send + Sync> = Box::new(MutableVec::<()>::new());
-    let _: Box<dyn Send + Sync> = Box::new(MutableVec::<()>::new().signal_vec());
-    let _: Box<dyn Send + Sync> = Box::new(MutableVec::<()>::new().signal_vec_cloned());
+    let store = Store::new();
+    
+    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable_vec::<()>());
+    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable_vec::<()>().signal_vec());
+    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable_vec::<()>().signal_vec_cloned());
 
-    let _: Box<dyn Send + Sync> = Box::new(MutableVec::<()>::new_with_values(vec![]));
-    let _: Box<dyn Send + Sync> = Box::new(MutableVec::<()>::new_with_values(vec![]).signal_vec());
-    let _: Box<dyn Send + Sync> = Box::new(MutableVec::<()>::new_with_values(vec![]).signal_vec_cloned());
+    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable_vec_w_values::<()>(vec![]));
+    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable_vec_w_values::<()>(vec![]).signal_vec());
+    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable_vec_w_values::<()>(vec![]).signal_vec_cloned());
 }
 
 

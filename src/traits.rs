@@ -1,7 +1,7 @@
 use std::future::Future;
-use crate::signal::Signal;
+
 use crate::signal_map::MutableSignalMap;
-use crate::store::{SpawnedFutureKey, StoreArcMutexGuard};
+use crate::store::{SpawnedFutureKey, StoreArcMutexGuard, StoreHandle};
 
 pub trait SSS: Send + Sync + 'static {}
 
@@ -41,6 +41,10 @@ pub trait HasSignalMapCloned<K, V>
         V: Clone
 {
     fn signal_map_cloned(&self) -> MutableSignalMap<K, V>;
+}
+
+pub(crate) trait HasStoreHandle {
+    fn store_handle(&self) -> &StoreHandle;
 }
 
 pub trait Provider {

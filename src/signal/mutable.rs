@@ -1,16 +1,19 @@
-use super::Signal;
 use std;
 use std::fmt;
-use std::pin::Pin;
 use std::marker::Unpin;
 use std::ops::{Deref, DerefMut};
+use std::pin::Pin;
 // TODO use parking_lot ?
-use std::sync::{Arc, Weak, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
 // TODO use parking_lot ?
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::task::{Poll, Waker, Context};
-use crate::traits::{HasSignal, HasSignalCloned};
+use std::task::{Context, Poll, Waker};
+use crate::observable::{Observable, Observe, ObserveCloned};
 
+use crate::store::StoreHandle;
+use crate::traits::{HasSignal, HasSignalCloned, HasStoreHandle};
+
+use super::Signal;
 
 #[derive(Debug)]
 pub(crate) struct ChangedWaker {
@@ -167,23 +170,26 @@ impl<'a, A> Deref for MutableLockRef<'a, A> {
 }
 
 
-#[repr(transparent)]
-pub struct ReadOnlyMutable<A>(Arc<MutableState<A>>);
+//#[repr(transparent)]
+pub struct ReadOnlyMutable<A>{
+    store_handle: StoreHandle,
+    state: Arc<MutableState<A>>
+}
 
 impl<A> ReadOnlyMutable<A> {
     // TODO return Result ?
     #[inline]
     pub fn lock_ref(&self) -> MutableLockRef<A> {
         MutableLockRef {
-            lock: self.0.lock.read().unwrap(),
+            lock: self.state.lock.read().unwrap(),
         }
     }
 
     fn signal_state(&self) -> MutableSignalState<A> {
-        let signal = MutableSignalState::new(self.0.clone());
+        let signal = MutableSignalState::new(self.state.clone());
 
-        if self.0.senders.load(Ordering::SeqCst) != 0 {
-            self.0.lock.write().unwrap().push_signal(&signal.waker);
+        if self.state.senders.load(Ordering::SeqCst) != 0 {
+            self.state.lock.write().unwrap().push_signal(&signal.waker);
         }
 
         signal
@@ -198,9 +204,27 @@ impl<A> ReadOnlyMutable<A> {
 impl<A: Copy> ReadOnlyMutable<A> {
     #[inline]
     pub fn get(&self) -> A {
-        self.0.lock.read().unwrap().value
+        self.state.lock.read().unwrap().value
     }
 }
+
+impl<A> HasStoreHandle for ReadOnlyMutable<A> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
+}
+
+impl<A> Observe<A> for ReadOnlyMutable<A>
+    where
+        <Self as HasSignal<A>>::Return: Signal + Send + Sync + 'static,
+        A: Copy + Send + Sync + 'static
+{}
+
+impl<A> ObserveCloned<A> for ReadOnlyMutable<A>
+    where
+        <Self as HasSignalCloned<A>>::Return: Signal + Send + Sync + 'static,
+        A: Clone + Send + Sync + 'static
+{}
 
 impl<A: Copy> HasSignal<A> for ReadOnlyMutable<A> {
     type Return = MutableSignal<A>;
@@ -214,7 +238,7 @@ impl<A: Copy> HasSignal<A> for ReadOnlyMutable<A> {
 impl<A: Clone> ReadOnlyMutable<A> {
     #[inline]
     pub fn get_cloned(&self) -> A {
-        self.0.lock.read().unwrap().value.clone()
+        self.state.lock.read().unwrap().value.clone()
     }
 }
 
@@ -230,13 +254,16 @@ impl<A: Clone> HasSignalCloned<A> for ReadOnlyMutable<A> {
 impl<A> Clone for ReadOnlyMutable<A> {
     #[inline]
     fn clone(&self) -> Self {
-        ReadOnlyMutable(self.0.clone())
+        Self { 
+            store_handle: self.store_handle.clone(),
+            state: self.state.clone()
+        }
     }
 }
 
 impl<A> fmt::Debug for ReadOnlyMutable<A> where A: fmt::Debug {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        let state = self.0.lock.read().unwrap();
+        let state = self.state.lock.read().unwrap();
 
         fmt.debug_tuple("ReadOnlyMutable")
             .field(&state.value)
@@ -250,13 +277,25 @@ pub struct Mutable<A>(ReadOnlyMutable<A>);
 
 impl<A> Mutable<A> {
     // TODO should this inline ?
-    pub fn new(value: A) -> Self {
-        Self::from(value)
+    pub fn new(value: A, store_handle: StoreHandle) -> Self {
+        let state = Arc::new(
+            MutableState {
+                senders: AtomicUsize::new(1),
+                lock: RwLock::new(MutableLockState {
+                    value: value.into(),
+                    signals: vec![]
+                }) 
+            }
+        );
+        Self(ReadOnlyMutable{
+            store_handle,
+            state
+        })
     }
 
     #[inline]
     fn state(&self) -> &Arc<MutableState<A>> {
-        &(self.0).0
+        &(self.0).state
     }
 
     #[inline]
@@ -324,18 +363,20 @@ impl<A> Mutable<A> {
     }
 }
 
-impl<A> From<A> for Mutable<A> {
-    #[inline]
-    fn from(value: A) -> Self {
-        Mutable(ReadOnlyMutable(Arc::new(MutableState {
-            senders: AtomicUsize::new(1),
-            lock: RwLock::new(MutableLockState {
-                value: value.into(),
-                signals: vec![],
-            }),
-        })))
-    }
-}
+// impl<A> From<A> for Mutable<A> {
+//     #[inline]
+//     fn from(value: A) -> Self {
+//         let state = Arc::new(
+//             MutableState {
+//             senders: AtomicUsize::new(1),
+//             lock: RwLock::new(MutableLockState {
+//                 value: value.into(),
+//                 signals: vec![] 
+//             })
+//         });
+//         
+//     }
+// }
 
 impl<A> ::std::ops::Deref for Mutable<A> {
     type Target = ReadOnlyMutable<A>;
@@ -371,21 +412,21 @@ impl<T> serde::Serialize for Mutable<T> where T: serde::Serialize {
     }
 }
 
-#[cfg(feature = "serde")]
-impl<'de, T> serde::Deserialize<'de> for Mutable<T> where T: serde::Deserialize<'de> {
-    #[inline]
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: serde::Deserializer<'de> {
-        T::deserialize(deserializer).map(Mutable::new)
-    }
-}
+// #[cfg(feature = "serde")]
+// impl<'de, T> serde::Deserialize<'de> for Mutable<T> where T: serde::Deserialize<'de> {
+//     #[inline]
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: serde::Deserializer<'de> {
+//         T::deserialize(deserializer).map(Mutable::new)
+//     }
+// }
 
 // TODO can this be derived ?
-impl<T: Default> Default for Mutable<T> {
-    #[inline]
-    fn default() -> Self {
-        Mutable::new(Default::default())
-    }
-}
+// impl<T: Default> Default for Mutable<T> {
+//     #[inline]
+//     fn default() -> Self {
+//         Mutable::new(Default::default())
+//     }
+// }
 
 impl<A> Clone for Mutable<A> {
     #[inline]
@@ -471,11 +512,14 @@ impl<A: Clone> Signal for MutableSignalCloned<A> {
 
 #[cfg(test)]
 mod tests {
-    use crate::signal::Mutable;
+    use crate::store::{Manager, Store};
 
     #[test]
     fn it_clones() {
-        let mutable = Mutable::new(50);
+        let store = Store::new();
+        let mutable = store.create_mutable(50);
+        
+        //let mutable = Mutable::new(50);
         let mutable_clone = mutable.clone();
         mutable.set(100);
         assert_eq!(mutable_clone.get(), 100)

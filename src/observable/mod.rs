@@ -1,9 +1,11 @@
-use crate::signal::{Mutable, MutableSignal, MutableSignalCloned};
-use crate::store::SpawnedFutureKey;
-use crate::traits::{HasSignal, HasSignalCloned, HasSpawnedFutureKey};
+use crate::signal::{Mutable, MutableSignal, MutableSignalCloned, Signal};
+use crate::store::{Manager, SpawnedFutureKey, StoreAccess, StoreHandle};
+use crate::signal::SignalExt;
+use crate::traits::{HasSignal, HasSignalCloned, HasSpawnedFutureKey, HasStoreHandle};
 
 #[derive(Debug, Clone)]
 pub struct Observable<T> {
+    store_handle: StoreHandle,
     pub(crate) mutable: Mutable<T>,
     pub(crate) fut_key: SpawnedFutureKey
 }
@@ -19,6 +21,24 @@ impl<T: Copy> Observable<T> {
         self.mutable.get()
     }
 }
+
+impl<A> HasStoreHandle for Observable<A> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
+}
+
+impl<A> Observe<A> for Observable<A>
+    where
+        <Self as HasSignal<A>>::Return: Signal + Send + Sync + 'static,
+        A: Copy + Send + Sync + 'static
+{}
+
+impl<A> ObserveCloned<A> for Observable<A>
+    where
+        <Self as HasSignalCloned<A>>::Return: Signal + Send + Sync + 'static,
+        A: Clone + Send + Sync + 'static
+{}
 
 impl<T: Clone> Observable<T> {
     pub fn get_cloned(&self) -> T {
@@ -39,5 +59,63 @@ impl<A: Clone> HasSignalCloned<A> for Observable<A> {
 
     fn signal_cloned(&self) -> Self::Return {
         self.mutable.signal_cloned()
+    }
+}
+
+pub trait Observe<A>: HasSignal<A> + HasStoreHandle
+    where
+        <Self as HasSignal<A>>::Return: Signal + Send + Sync + 'static,
+        A: Copy + Send + Sync + 'static
+{
+    fn observe<U, F>(&self, f: F) 
+        -> Observable<U>
+        where
+            U: Default + Send + Sync + 'static,
+            F: Fn(<<Self as HasSignal<A>>::Return as Signal>::Item) -> U + Send + Sync + 'static
+    {
+        let mut store_handle = self.store_handle().clone();
+        let out = store_handle.create_mutable(U::default());
+        let out_mutable_clone = out.clone();
+        let fut = self.signal().for_each(move |v| {
+            out_mutable_clone.set(f(v));
+            async {}
+        });
+
+        //let mut lock = store_handle.get_store();
+        let fut_key = store_handle.spawn_fut(None, fut);
+        Observable {
+            store_handle,
+            mutable: out,
+            fut_key
+        }
+    }
+}
+
+pub trait ObserveCloned<A>: HasSignalCloned<A> + HasStoreHandle
+    where
+        <Self as HasSignalCloned<A>>::Return: Signal + Send + Sync + 'static,
+        A: Clone + Send + Sync + 'static
+{
+    fn observe_cloned<U, F>(&self, f: F)
+                            -> Observable<U>
+        where
+            U: Default + Send + Sync + 'static,
+            F: Fn(<<Self as HasSignalCloned<A>>::Return as Signal>::Item) -> U + Send + Sync + 'static
+    {
+        let mut store_handle = self.store_handle().clone();
+        let out = store_handle.create_mutable(U::default());
+        let out_mutable_clone = out.clone();
+        let fut = self.signal_cloned().for_each(move |v| {
+            out_mutable_clone.set(f(v));
+            async {  }
+        });
+
+        //let mut lock = store_handle.get_store();
+        let fut_key = store_handle.spawn_fut(None, fut);
+        Observable {
+            store_handle,
+            mutable: out,
+            fut_key
+        }
     }
 }

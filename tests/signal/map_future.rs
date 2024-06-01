@@ -3,13 +3,15 @@ use std::cell::Cell;
 use std::task::Poll;
 use rx_store::signal::{SignalExt, Mutable};
 use futures_util::future::poll_fn;
+use rx_store::store::{Manager, Store};
 use rx_store::traits::HasSignal;
 use crate::util;
 
 
 #[test]
 fn test_map_future() {
-    let mutable = Rc::new(Mutable::new(1));
+    let store = Store::new();
+    let mutable = Rc::new(store.create_mutable(1));
 
     let first = Rc::new(Cell::new(true));
 
