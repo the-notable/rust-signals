@@ -255,10 +255,11 @@ impl StoreAccess for StoreHandle {
 
 #[cfg(test)]
 mod tests {
+    use std::ops::Deref;
     use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
-    use crate::observable::{Observe, ObserveCloned};
+    use crate::observable::{Observe};
     use crate::store::{Manager, RxStore, StoreAccess};
 
     #[test]
@@ -322,7 +323,7 @@ mod tests {
     fn it_derives_observable_cloned_from_mutable() {
         let store = RxStore::new();
         let mutable = store.new_mutable("hello".to_string());
-        let observable = mutable.observe_cloned(|source| {
+        let observable = mutable.deref().observe(|source| {
             format!("{}, general kenobi", source)
         });
         mutable.set(format!("{} there", mutable.get_cloned()));
@@ -348,10 +349,10 @@ mod tests {
     fn it_derives_observable_cloned_from_observable() {
         let store = RxStore::new();
         let mutable = store.new_mutable("hello".to_string());
-        let observable_one = mutable.observe_cloned(|source| {
+        let observable_one = mutable.observe(|source| {
             format!("{}, general kenobi", source)
         });
-        let observable_two = observable_one.observe_cloned(|source| {
+        let observable_two = observable_one.observe(|source| {
             format!("{}, nice to see you", source)
         });
 

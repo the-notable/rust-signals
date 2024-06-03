@@ -8,55 +8,54 @@ pub trait SSS: Send + Sync + 'static {}
 
 impl<T: Send + Sync + 'static> SSS for T {}
 
-pub trait Get<T: Copy> {
+pub trait Get<T: Clone> {
     fn get(&self) -> T;
 }
 
-pub trait GetCloned<T: Clone> {
-    fn get_cloned(&self) -> T;
-}
+// pub trait GetCloned<T: Clone> {
+//     fn get_cloned(&self) -> T;
+// }
 
-pub trait HasSignal<T: Copy> {
+pub trait HasSignal<T: Clone> {
     type Return;
 
     fn signal(&self) -> Self::Return;
 }
 
-pub trait HasSignalCloned<T: Clone> {
-    type Return;//: Signal + Send + Sync + 'static;
-
-    fn signal_cloned(&self) -> Self::Return;
-}
+// pub trait HasSignalCloned<T: Clone> {
+//     type Return;//: Signal + Send + Sync + 'static;
+// 
+//     fn signal_cloned(&self) -> Self::Return;
+// }
 
 pub trait HasSignalMap<K, V>
-    where
-        K: Copy + Ord,
-        V: Copy
-{
-    fn signal_map(&self) -> MutableSignalMap<K, V>;
-}
-
-pub trait HasSignalMapCloned<K, V>
     where
         K: Clone + Ord,
         V: Clone
 {
-    fn signal_map_cloned(&self) -> MutableSignalMap<K, V>;
+    fn signal_map(&self) -> MutableSignalMap<K, V>;
 }
 
-pub(crate) trait HasStoreHandle {
+// pub trait HasSignalMapCloned<K, V>
+//     where
+//         K: Clone + Ord,
+//         V: Clone
+// {
+//     fn signal_map_cloned(&self) -> MutableSignalMap<K, V>;
+// }
+
+pub trait HasStoreHandle {
     fn store_handle(&self) -> &StoreHandle;
 }
 
-pub trait Provider {
+pub trait Provider: HasStoreHandle {
+    type YieldedValue;
+    
     fn fut_key(&self) -> Option<SpawnedFutureKey>;
 
-    fn store_handle(&self) -> &StoreHandle;
-
-    fn register_effectt<T, F, U>(&self, f: F) -> Result<SpawnedFutureKey, &'static str>
+    fn register_effectt<F>(&self, f: F) -> Result<SpawnedFutureKey, &'static str>
         where
-            T: Copy,
-            F: Fn(U) + Send + 'static;
+            F: Fn(Self::YieldedValue) + Send + 'static;
     
     fn register_effect<T, F>(&self, f: F) -> Result<SpawnedFutureKey, &'static str>
         where 
@@ -88,26 +87,26 @@ pub trait ObserveMap<T, O, K, V, F, U>
         Self: HasSignalMap<K, V> + Provider,
         O: IsObservable,
         <O as IsObservable>::Inner: Clone,
-        K: Copy + Ord,
-        V: Copy,
+        K: Clone + Ord,
+        V: Clone,
         F: Fn(MutableSignalMap<K, V>, <O as IsObservable>::Inner) -> U,
         U: Future<Output = ()>  + Send + 'static
 {
     fn observe_map(&self, f: F) -> O;
 }
 
-pub trait ObserveMapCloned<T, O, K, V, F, U>
-    where
-        T: HasSignalMapCloned<K, V> + Provider,
-        O: IsObservable,
-        <O as IsObservable>::Inner: Clone,
-        K: Clone + Ord,
-        V: Clone,
-        F: Fn(MutableSignalMap<K, V>, <O as IsObservable>::Inner) -> U,
-        U: Future<Output = ()>  + Send + 'static
-{
-    fn observe_map_cloned(&self, f: F) -> O;
-}
+// pub trait ObserveMapCloned<T, O, K, V, F, U>
+//     where
+//         T: HasSignalMapCloned<K, V> + Provider,
+//         O: IsObservable,
+//         <O as IsObservable>::Inner: Clone,
+//         K: Clone + Ord,
+//         V: Clone,
+//         F: Fn(MutableSignalMap<K, V>, <O as IsObservable>::Inner) -> U,
+//         U: Future<Output = ()>  + Send + 'static
+// {
+//     fn observe_map_cloned(&self, f: F) -> O;
+// }
 
 pub(crate) trait IsObservable {
     type Inner;

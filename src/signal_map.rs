@@ -10,7 +10,7 @@ use futures_util::stream;
 use futures_util::stream::StreamExt;
 use pin_project::pin_project;
 
-use crate::signal::Signal;
+use crate::signal::{Signal};
 
 pub use self::mutable_btree_map::*;
 
@@ -527,7 +527,7 @@ mod mutable_btree_map {
 
     use crate::signal_vec::{SignalVec, VecDiff};
     use crate::store::{SpawnedFutureKey, StoreHandle};
-    use crate::traits::{HasSignalMap, HasSignalMapCloned, HasStoreHandle, Provider};
+    use crate::traits::{HasSignalMap, HasStoreHandle, Provider};
 
     use super::{MapDiff, SignalMap, SignalMapExt};
 
@@ -604,54 +604,9 @@ mod mutable_btree_map {
     }
 
     impl<K: Clone + Ord, V: Clone> MutableBTreeState<K, V> {
-        fn entries_cloned(values: &BTreeMap<K, V>) -> Vec<(K, V)> {
-            values.into_iter().map(|(k, v)| {
-                (k.clone(), v.clone())
-            }).collect()
-        }
-
-        fn replace_cloned(&mut self, values: BTreeMap<K, V>) {
-            let entries = self.change(|| Self::entries_cloned(&values));
-
-            self.values = values;
-
-            self.notify_clone(entries, |entries| MapDiff::Replace { entries });
-        }
-
-        fn insert_cloned(&mut self, key: K, value: V) -> Option<V> {
-            let x = self.change(|| (key.clone(), value.clone()));
-
-            if let Some(value) = self.values.insert(key, value) {
-                self.notify_clone(x, |(key, value)| MapDiff::Update { key, value });
-                Some(value)
-
-            } else {
-                self.notify_clone(x, |(key, value)| MapDiff::Insert { key, value });
-                None
-            }
-        }
-
-        fn signal_map_cloned(&mut self) -> MutableSignalMap<K, V> {
-            let (sender, receiver) = mpsc::unbounded();
-
-            if !self.values.is_empty() {
-                sender.unbounded_send(MapDiff::Replace {
-                    entries: Self::entries_cloned(&self.values),
-                }).unwrap();
-            }
-
-            self.senders.push(sender);
-
-            MutableSignalMap {
-                receiver
-            }
-        }
-    }
-
-    impl<K: Copy + Ord, V: Copy> MutableBTreeState<K, V> {
         fn entries(values: &BTreeMap<K, V>) -> Vec<(K, V)> {
             values.into_iter().map(|(k, v)| {
-                (*k, *v)
+                (k.clone(), v.clone())
             }).collect()
         }
 
@@ -664,12 +619,14 @@ mod mutable_btree_map {
         }
 
         fn insert(&mut self, key: K, value: V) -> Option<V> {
-            if let Some(old_value) = self.values.insert(key, value) {
-                self.notify(|| MapDiff::Update { key, value });
-                Some(old_value)
+            let x = self.change(|| (key.clone(), value.clone()));
+
+            if let Some(value) = self.values.insert(key, value) {
+                self.notify_clone(x, |(key, value)| MapDiff::Update { key, value });
+                Some(value)
 
             } else {
-                self.notify(|| MapDiff::Insert { key, value });
+                self.notify_clone(x, |(key, value)| MapDiff::Insert { key, value });
                 None
             }
         }
@@ -690,6 +647,49 @@ mod mutable_btree_map {
             }
         }
     }
+
+    // impl<K: Clone + Ord, V: Clone> MutableBTreeState<K, V> {
+    //     fn entries(values: &BTreeMap<K, V>) -> Vec<(K, V)> {
+    //         values.into_iter().map(|(k, v)| {
+    //             (k.clone(), v.clone())
+    //         }).collect()
+    //     }
+    // 
+    //     fn replace(&mut self, values: BTreeMap<K, V>) {
+    //         let entries = self.change(|| Self::entries(&values));
+    // 
+    //         self.values = values;
+    // 
+    //         self.notify_clone(entries, |entries| MapDiff::Replace { entries });
+    //     }
+    // 
+    //     fn insert(&mut self, key: K, value: V) -> Option<V> {
+    //         if let Some(old_value) = self.values.insert(key, value) {
+    //             self.notify(|| MapDiff::Update { key, value });
+    //             Some(old_value)
+    // 
+    //         } else {
+    //             self.notify(|| MapDiff::Insert { key, value });
+    //             None
+    //         }
+    //     }
+    // 
+    //     fn signal_map(&mut self) -> MutableSignalMap<K, V> {
+    //         let (sender, receiver) = mpsc::unbounded();
+    // 
+    //         if !self.values.is_empty() {
+    //             sender.unbounded_send(MapDiff::Replace {
+    //                 entries: Self::entries(&self.values),
+    //             }).unwrap();
+    //         }
+    // 
+    //         self.senders.push(sender);
+    // 
+    //         MutableSignalMap {
+    //             receiver
+    //         }
+    //     }
+    // }
 
 
     macro_rules! make_shared {
@@ -787,12 +787,12 @@ mod mutable_btree_map {
     impl<'a, K, V> MutableBTreeMapLockMut<'a, K, V> where K: Ord + Clone, V: Clone {
         #[inline]
         pub fn replace_cloned(&mut self, values: BTreeMap<K, V>) {
-            self.lock.replace_cloned(values)
+            self.lock.replace(values)
         }
 
         #[inline]
         pub fn insert_cloned(&mut self, key: K, value: V) -> Option<V> {
-            self.lock.insert_cloned(key, value)
+            self.lock.insert(key, value)
         }
     }
 
@@ -869,20 +869,26 @@ mod mutable_btree_map {
     //     }
     // }
 
-    impl<K, V> HasSignalMapCloned<K, V> for MutableBTreeMap<K, V> where K: Ord + Clone, V: Clone  {
-        #[inline]
-        fn signal_map_cloned(&self) -> MutableSignalMap<K, V> {
-            self.state.write().unwrap().signal_map_cloned()
-        }
-    }
+    // impl<K, V> HasSignalMapCloned<K, V> for MutableBTreeMap<K, V> where K: Ord + Clone, V: Clone  {
+    //     #[inline]
+    //     fn signal_map_cloned(&self) -> MutableSignalMap<K, V> {
+    //         self.state.write().unwrap().signal_map_cloned()
+    //     }
+    // }
 
     impl<K, V> Provider for MutableBTreeMap<K, V> {
+        type YieldedValue = MapDiff<K, V>;
+
         fn fut_key(&self) -> Option<SpawnedFutureKey> {
             None
         }
 
-        fn store_handle(&self) -> &StoreHandle {
-            &self.store_handle
+        fn register_effectt<F>(&self, f: F)
+            -> Result<SpawnedFutureKey, &'static str> 
+            where 
+                F: Fn(Self::YieldedValue) + Send + 'static 
+        {
+            todo!()
         }
     }
 
@@ -897,7 +903,7 @@ mod mutable_btree_map {
         #[inline]
         pub fn signal_vec_keys(&self) -> MutableBTreeMapKeys<K, V> {
             MutableBTreeMapKeys {
-                signal: self.signal_map_cloned(),
+                signal: self.signal_map(),
                 keys: vec![],
             }
         }
@@ -906,13 +912,13 @@ mod mutable_btree_map {
         #[inline]
         pub fn entries_cloned(&self) -> MutableBTreeMapEntries<K, V> {
             MutableBTreeMapEntries {
-                signal: self.signal_map_cloned(),
+                signal: self.signal_map(),
                 keys: vec![],
             }
         }
     }
 
-    impl<K, V> HasSignalMap<K, V> for MutableBTreeMap<K, V> where K: Ord + Copy, V: Copy  {
+    impl<K, V> HasSignalMap<K, V> for MutableBTreeMap<K, V> where K: Ord + Clone, V: Clone  {
         #[inline]
         fn signal_map(&self) -> MutableSignalMap<K, V> {
             self.state.write().unwrap().signal_map()
@@ -1100,9 +1106,9 @@ mod mutable_btree_map {
 
         use crate::signal_map::{MapDiff, MutableBTreeMapLockMut, MutableSignalMap};
         use crate::store::{SpawnedFutureKey, StoreAccess, StoreHandle};
-        use crate::traits::{HasSignalMap, HasSignalMapCloned, IsObservable, ObserveMap, ObserveMapCloned, Provider};
+        use crate::traits::{HasSignalMap, HasStoreHandle, IsObservable, ObserveMap, Provider, SSS};
 
-        use super::{MutableBTreeMap, MutableBTreeMapLockRef};
+        use super::{MutableBTreeMap, MutableBTreeMapLockRef, SignalMapExt};
 
         trait LockMut<K, V> {
             fn lock_mut(&self) -> MutableBTreeMapLockMut<'_, K, V>;
@@ -1115,21 +1121,22 @@ mod mutable_btree_map {
             fut_key: SpawnedFutureKey
         }
 
-        impl<K, V> Provider for ObservableBTreeMap<K, V> {
-            fn fut_key(&self) -> Option<SpawnedFutureKey> {
-                Some(self.fut_key)
-            }
-
+        impl<K, V> HasStoreHandle for ObservableBTreeMap<K, V> {
             fn store_handle(&self) -> &StoreHandle {
                 &self.store_handle
             }
         }
+        
+        impl<K: Clone + Ord + SSS, V: Clone + SSS> Provider for ObservableBTreeMap<K, V> {
+            type YieldedValue = MapDiff<K, V>;
+            
+            fn fut_key(&self) -> Option<SpawnedFutureKey> {
+                Some(self.fut_key)
+            }
 
-        impl<K: Copy + Ord, V: Copy> Provider for ObservableBTreeMap<K, V> {
-            fn register_effectt<R, F, U>(&self, f: F) -> Result<SpawnedFutureKey, &'static str>
+            fn register_effectt<F>(&self, f: F) -> Result<SpawnedFutureKey, &'static str>
                 where
-                    R: Copy,
-                    F: Fn(U) + Send + 'static
+                    F: Fn(Self::YieldedValue) + Send + 'static
             {
                 let fut = self.signal_map().for_each(move |v| {
                     f(v);
@@ -1142,15 +1149,9 @@ mod mutable_btree_map {
             }
         }
 
-        impl<K: Ord + Copy, V: Copy> HasSignalMap<K, V> for ObservableBTreeMap<K, V> {
+        impl<K: Ord + Clone, V: Clone> HasSignalMap<K, V> for ObservableBTreeMap<K, V> {
             fn signal_map(&self) -> MutableSignalMap<K, V> {
                 self.map.signal_map()
-            }
-        }
-
-        impl<K: Ord + Clone, V: Clone> HasSignalMapCloned<K, V> for ObservableBTreeMap<K, V> {
-            fn signal_map_cloned(&self) -> MutableSignalMap<K, V> {
-                self.map.signal_map_cloned()
             }
         }
 
@@ -1199,8 +1200,8 @@ mod mutable_btree_map {
                 T: HasSignalMap<K1, V1> + Provider,
                 O: IsObservable<Inner = MutableBTreeMap<K2, V2>>,
                 <O as IsObservable>::Inner: Clone,
-                K1: Copy + Ord,
-                V1: Copy,
+                K1: Clone + Ord,
+                V1: Clone,
                 F: Fn(MutableSignalMap<K1, V1>, <O as IsObservable>::Inner) -> U,
                 U: Future<Output = ()>  + Send + 'static
         {
@@ -1209,27 +1210,6 @@ mod mutable_btree_map {
                 let out = O::new_inner(store_handle.clone());
                 let out_clone = out.clone();
                 let fut = f(self.signal_map(), out_clone);
-
-                let fut_key = store_handle.spawn_fut(self.fut_key(), fut);
-                O::new(store_handle, out, fut_key)
-            }
-        }
-
-        impl<T, O, K1, K2, V1, V2, F, U> ObserveMapCloned<T, O, K1, V1, F, U> for T
-            where
-                T: HasSignalMapCloned<K1, V1> + Provider,
-                O: IsObservable<Inner = MutableBTreeMap<K2, V2>>,
-                <O as IsObservable>::Inner: Clone,
-                K1: Clone + Ord,
-                V1: Clone,
-                F: Fn(MutableSignalMap<K1, V1>, <O as IsObservable>::Inner) -> U,
-                U: Future<Output = ()>  + Send + 'static
-        {
-            fn observe_map_cloned(&self, f: F) -> O {
-                let mut store_handle = self.store_handle().clone();
-                let out = O::new_inner(store_handle.clone());
-                let out_clone = out.clone();
-                let fut = f(self.signal_map_cloned(), out_clone);
 
                 let fut_key = store_handle.spawn_fut(self.fut_key(), fut);
                 O::new(store_handle, out, fut_key)
@@ -1245,7 +1225,6 @@ mod mutable_btree_map {
             use crate::signal_map::observable_btree_map::{handle_map_diff, ObservableBTreeMap, ObserveMap};
             use crate::signal_map::SignalMapExt;
             use crate::store::{Manager, RxStore};
-            use crate::traits::ObserveMapCloned;
 
             #[test]
             fn it_observes_map_cloned() {
@@ -1256,7 +1235,7 @@ mod mutable_btree_map {
                     lock.insert_cloned("one".to_owned(), 1);
                     lock.insert_cloned("two".to_owned(), 2);
                 }
-                let obsv_map: ObservableBTreeMap<i32, String> = map.observe_map_cloned(|input, output: MutableBTreeMap<i32, String>| {
+                let obsv_map: ObservableBTreeMap<i32, String> = map.observe_map(|input, output: MutableBTreeMap<i32, String>| {
                     input.for_each(move |diff| {
                         match diff {
                             MapDiff::Replace { entries } => {

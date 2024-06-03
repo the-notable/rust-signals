@@ -9,9 +9,9 @@ use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::task::{Context, Poll, Waker};
 
-use crate::observable::{Observe, ObserveCloned};
-use crate::store::StoreHandle;
-use crate::traits::{HasSignal, HasSignalCloned, HasStoreHandle};
+use crate::observable::{Observe};
+use crate::store::{SpawnedFutureKey, StoreHandle};
+use crate::traits::{HasSignal, HasStoreHandle, Provider};
 
 use super::Signal;
 
@@ -201,10 +201,10 @@ impl<A> ReadOnlyMutable<A> {
     }
 }
 
-impl<A: Copy> ReadOnlyMutable<A> {
+impl<A: Clone> ReadOnlyMutable<A> {
     #[inline]
     pub fn get(&self) -> A {
-        self.state.lock.read().unwrap().value
+        self.state.lock.read().unwrap().value.clone()
     }
 }
 
@@ -217,16 +217,26 @@ impl<A> HasStoreHandle for ReadOnlyMutable<A> {
 impl<A> Observe<A> for ReadOnlyMutable<A>
     where
         <Self as HasSignal<A>>::Return: Signal + Send + Sync + 'static,
-        A: Copy + Send + Sync + 'static
-{}
-
-impl<A> ObserveCloned<A> for ReadOnlyMutable<A>
-    where
-        <Self as HasSignalCloned<A>>::Return: Signal + Send + Sync + 'static,
         A: Clone + Send + Sync + 'static
 {}
 
-impl<A: Copy> HasSignal<A> for ReadOnlyMutable<A> {
+impl<A> Provider for ReadOnlyMutable<A> {
+    type YieldedValue = A;
+
+    fn fut_key(&self) -> Option<SpawnedFutureKey> {
+        None
+    }
+
+    fn register_effectt<F>(&self, f: F) 
+        -> Result<SpawnedFutureKey, &'static str>
+        where 
+            F: Fn(Self::YieldedValue) + Send + 'static 
+    {
+        todo!()
+    }
+}
+
+impl<A: Clone> HasSignal<A> for ReadOnlyMutable<A> {
     type Return = MutableSignal<A>;
 
     #[inline]
@@ -239,15 +249,6 @@ impl<A: Clone> ReadOnlyMutable<A> {
     #[inline]
     pub fn get_cloned(&self) -> A {
         self.state.lock.read().unwrap().value.clone()
-    }
-}
-
-impl<A: Clone> HasSignalCloned<A> for ReadOnlyMutable<A> {
-    type Return = MutableSignalCloned<A>;
-
-    #[inline]
-    fn signal_cloned(&self) -> Self::Return {
-        MutableSignalCloned(self.signal_state())
     }
 }
 
@@ -464,11 +465,11 @@ pub struct MutableSignal<A>(MutableSignalState<A>);
 
 impl<A> Unpin for MutableSignal<A> {}
 
-impl<A: Copy> Signal for MutableSignal<A> {
+impl<A: Clone> Signal for MutableSignal<A> {
     type Item = A;
 
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        self.0.poll_change(cx, |value| *value)
+        self.0.poll_change(cx, |value| value.clone())
     }
 }
 
