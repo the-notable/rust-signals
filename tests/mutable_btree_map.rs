@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::task::Poll;
 use rx_store::signal_map::{MapDiff, MutableBTreeMap, MutableBTreeMapLockMut};
+use rx_store::store::{Manager, Store};
 use rx_store::traits::{HasSignalMap, HasSignalMapCloned};
 
 mod util;
@@ -13,9 +14,11 @@ struct TestValueType {
 fn emits_diffs<K, V, F>(f: F, polls: Vec<Poll<Option<MapDiff<K, V>>>>)
     where F: FnOnce(&mut MutableBTreeMapLockMut<K, V>),
           K: Ord + Copy + std::fmt::Debug,
-          V: PartialEq + Copy + std::fmt::Debug {
-
-    let map = MutableBTreeMap::<K, V>::new();
+          V: PartialEq + Copy + std::fmt::Debug 
+{
+    let store = Store::new();
+    let map = store.new_mutable_btree_map::<K, V>();
+    //let map = MutableBTreeMap::<K, V>::new();
     assert_eq!(util::get_signal_map_polls(map.signal_map(), || {
         {
             let mut v = map.lock_mut();
@@ -28,9 +31,11 @@ fn emits_diffs<K, V, F>(f: F, polls: Vec<Poll<Option<MapDiff<K, V>>>>)
 fn emits_diffs_cloned<K, V, F>(f: F, polls: Vec<Poll<Option<MapDiff<K, V>>>>)
     where F: FnOnce(&mut MutableBTreeMapLockMut<K, V>),
           K: Ord + Clone + std::fmt::Debug,
-          V: PartialEq + Clone + std::fmt::Debug {
-
-    let map = MutableBTreeMap::<K, V>::new();
+          V: PartialEq + Clone + std::fmt::Debug 
+{
+    let store = Store::new();
+    let map = store.new_mutable_btree_map::<K, V>();
+    //let map = MutableBTreeMap::<K, V>::new();
     assert_eq!(util::get_signal_map_polls(map.signal_map_cloned(), || {
         {
             let mut v = map.lock_mut();
@@ -40,9 +45,26 @@ fn emits_diffs_cloned<K, V, F>(f: F, polls: Vec<Poll<Option<MapDiff<K, V>>>>)
     }), polls);
 }
 
+// fn emits_diffs_cloned<K, V, F>(f: F, polls: Vec<Poll<Option<MapDiff<K, V>>>>)
+//     where F: FnOnce(&mut MutableBTreeMapLockMut<K, V>),
+//           K: Ord + Clone + std::fmt::Debug,
+//           V: PartialEq + Clone + std::fmt::Debug {
+// 
+//     let map = MutableBTreeMap::<K, V>::new();
+//     assert_eq!(util::get_signal_map_polls(map.signal_map_cloned(), || {
+//         {
+//             let mut v = map.lock_mut();
+//             f(&mut v);
+//         }
+//         drop(map);
+//     }), polls);
+// }
+
 #[test]
 fn insert_and_remove() {
-    let m = MutableBTreeMap::<u8, i8>::new();
+    let store = Store::new();
+    let m = store.new_mutable_btree_map::<u8, i8>();
+    //let m = MutableBTreeMap::<u8, i8>::new();
     let mut writer = m.lock_mut();
     writer.insert(8, -8);
     assert_eq!(writer.get(&8).unwrap(), &-8);
@@ -56,7 +78,9 @@ fn insert_and_remove() {
 
 #[test]
 fn clear() {
-    let m = MutableBTreeMap::<u8, i8>::new();
+    let store = Store::new();
+    let m = store.new_mutable_btree_map::<u8, i8>();
+    //let m = MutableBTreeMap::<u8, i8>::new();
     let mut writer = m.lock_mut();
     writer.insert(80, -80);
     assert_eq!(writer.get(&80).unwrap(), &-80);
@@ -67,7 +91,9 @@ fn clear() {
 
 #[test]
 fn insert_cloned() {
-    let m = MutableBTreeMap::<&'static str, TestValueType>::new();
+    let store = Store::new();
+    let m = store.new_mutable_btree_map::<&'static str, TestValueType>();
+    //let m = MutableBTreeMap::<&'static str, TestValueType>::new();
     let mut writer = m.lock_mut();
     writer.insert_cloned("test", TestValueType {inner: 294});
     assert_eq!(writer.get(&"test").unwrap(), &TestValueType {inner: 294});
@@ -101,11 +127,14 @@ fn signal_map_cloned() {
 
 #[test]
 fn is_from_btreemap() {
+    let store = Store::new();
     let src = BTreeMap::from([(1,"test".to_string())]);
-    let _out: MutableBTreeMap<u8, String> = MutableBTreeMap::from(src);
+    let _out: MutableBTreeMap<u8, String> = store.new_mutable_btree_map_w_values(src);
+    
+    //let _out: MutableBTreeMap<u8, String> = MutableBTreeMap::from(src);
 
-    let src = BTreeMap::from([(1,"test".to_string())]);
-    let _out: MutableBTreeMap<u8, String> = src.into();
-
-    let _out: MutableBTreeMap<u8, String> = [(1,"foo".to_string())].into();
+    // let src = BTreeMap::from([(1,"test".to_string())]);
+    // let _out: MutableBTreeMap<u8, String> = src.into();
+    // 
+    // let _out: MutableBTreeMap<u8, String> = [(1,"foo".to_string())].into();
 }

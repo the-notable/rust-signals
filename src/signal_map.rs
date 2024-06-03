@@ -88,10 +88,10 @@ impl<A> SignalMap for Box<A> where A: ?Sized + SignalMap + Unpin {
 
 // Copied from Future in the Rust stdlib
 impl<A> SignalMap for Pin<A>
-    where A: Unpin + ::std::ops::DerefMut,
+    where A: Unpin + std::ops::DerefMut,
           A::Target: SignalMap {
-    type Key = <<A as ::std::ops::Deref>::Target as SignalMap>::Key;
-    type Value = <<A as ::std::ops::Deref>::Target as SignalMap>::Value;
+    type Key = <<A as std::ops::Deref>::Target as SignalMap>::Key;
+    type Value = <<A as std::ops::Deref>::Target as SignalMap>::Value;
 
     #[inline]
     fn poll_map_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<MapDiff<Self::Key, Self::Value>>> {
@@ -843,11 +843,11 @@ mod mutable_btree_map {
     impl<K, V> MutableBTreeMap<K, V> where K: Ord {
         #[inline]
         pub fn new(store_handle: StoreHandle) -> Self {
-            Self::from_values(BTreeMap::new(), store_handle)
+            Self::new_with_values(BTreeMap::new(), store_handle)
         }
 
         #[inline]
-        pub fn from_values<T>(values: T, store_handle: StoreHandle) -> Self where BTreeMap<K, V>: From<T> {
+        pub fn new_with_values<T>(values: T, store_handle: StoreHandle) -> Self where BTreeMap<K, V>: From<T> {
             let state = Arc::new(RwLock::new(MutableBTreeState {
                 values: values.into(),
                 senders: vec![],
@@ -1091,7 +1091,7 @@ mod mutable_btree_map {
         }
     }
 
-    pub(crate) mod observable_btree_map {
+    pub mod observable_btree_map {
         use std::future::Future;
 
         use crate::signal_map::{MapDiff, MutableBTreeMapLockMut, MutableSignalMap};
@@ -1225,8 +1225,7 @@ mod mutable_btree_map {
             #[test]
             fn it_observes_map_cloned() {
                 let store = Store::new();
-                let map = store.mutable_btree_map();
-                let map_clone = map.clone();
+                let map = store.new_mutable_btree_map();
                 {
                     let mut lock = map.lock_mut();
                     lock.insert_cloned("one".to_owned(), 1);
@@ -1270,8 +1269,7 @@ mod mutable_btree_map {
             #[test]
             fn it_clears_observable_map() {
                 let store = Store::new();
-                let map = store.mutable_btree_map();
-                //let map_clone = map.clone();
+                let map = store.new_mutable_btree_map();
                 {
                     let mut lock = map.lock_mut();
                     lock.insert(1, 1);
@@ -1298,8 +1296,7 @@ mod mutable_btree_map {
             #[test]
             fn it_removes_from_observable_map() {
                 let store = Store::new();
-                let map = store.mutable_btree_map();
-                //let map_clone = map.clone();
+                let map = store.new_mutable_btree_map();
                 {
                     let mut lock = map.lock_mut();
                     lock.insert(1, 1);
@@ -1326,8 +1323,7 @@ mod mutable_btree_map {
             #[test]
             fn it_observes_observable_map() {
                 let store = Store::new();
-                let map = store.mutable_btree_map();
-                let map_clone = map.clone();
+                let map = store.new_mutable_btree_map();
                 {
                     let mut lock = map.lock_mut();
                     lock.insert(1, 1);
@@ -1344,7 +1340,7 @@ mod mutable_btree_map {
 
                 thread::sleep(Duration::from_millis(500));
 
-                let obsv_map_one_clone = obsv_map_one.clone();
+                //let obsv_map_one_clone = obsv_map_one.clone();
                 let obsv_map_two: ObservableBTreeMap<i32, i32> = obsv_map_one.observe_map(
                     |input, output: MutableBTreeMap<i32, i32>| {
                         input.for_each(move |diff| {

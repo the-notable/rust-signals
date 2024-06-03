@@ -1,5 +1,5 @@
+use std::collections::BTreeMap;
 use std::future::Future;
-use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -11,11 +11,10 @@ use tokio::runtime::{Builder, Handle, Runtime};
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 
-use crate::signal::{Mutable, Signal};
-use crate::signal::SignalExt;
+use crate::signal::{Mutable};
 use crate::signal_map::MutableBTreeMap;
 use crate::signal_vec::MutableVec;
-use crate::traits::{HasSignal, HasSpawnedFutureKey, HasStoreHandle, SSS};
+use crate::traits::{HasStoreHandle};
 
 new_key_type! {
     pub struct SpawnedFutureKey;
@@ -35,24 +34,31 @@ pub trait Manager: HasStoreHandle {
         lock.get::<T>().clone()
     }
     
-    fn create_mutable<T: 'static>(&self, v: T) -> Mutable<T> {
+    fn new_mutable<T: 'static>(&self, v: T) -> Mutable<T> {
         Mutable::new(v, self.store_handle().clone())
     }
     
-    fn create_mutable_vec<T>(&self) -> MutableVec<T> {
+    fn new_mutable_vec<T>(&self) -> MutableVec<T> {
         MutableVec::new(self.store_handle().clone())
     }
 
-    fn create_mutable_vec_w_values<T>(&self, v: Vec<T>) -> MutableVec<T> {
+    fn new_mutable_vec_w_values<T>(&self, v: Vec<T>) -> MutableVec<T> {
         MutableVec::new_with_values(v, self.store_handle().clone())
     }
 
-    fn create_mutable_vec_w_capacity<T>(&self, capacity: usize) -> MutableVec<T> {
+    fn new_mutable_vec_w_capacity<T>(&self, capacity: usize) -> MutableVec<T> {
         MutableVec::with_capacity(capacity, self.store_handle().clone())
     }
     
-    fn mutable_btree_map<K: Ord, V>(&self) -> MutableBTreeMap<K, V> {
+    fn new_mutable_btree_map<K: Ord, V>(&self) -> MutableBTreeMap<K, V> {
         MutableBTreeMap::new(self.store_handle().clone())
+    }
+
+    fn new_mutable_btree_map_w_values<T, K: Ord, V>(&self, values: T) 
+        -> MutableBTreeMap<K, V> 
+        where BTreeMap<K, V>: From<T> 
+    {
+        MutableBTreeMap::new_with_values(values, self.store_handle().clone())
     }
 }
 
@@ -60,7 +66,7 @@ pub(crate) trait StoreAccess {
     
     fn rt(&self) -> &Handle;
     
-    fn get_inner(&self) -> &Arc<Mutex<StoreInner>>;
+    fn get_inner(&self) -> &StorePtr;
 
     /// Attempts to acquire a lock through an `Arc`.
     ///
@@ -74,7 +80,7 @@ pub(crate) trait StoreAccess {
     ///
     /// Returned ArcMutexGuard needs to be dropped when done with.
     /// Don't go passing it around causing deadlocks and such.
-    fn get_store(&self) -> ArcMutexGuard<RawMutex, StoreInner> {
+    fn get_store(&self) -> StoreArcMutexGuard {
         let inner = self.get_inner();
         inner.lock_arc()
     }
@@ -93,7 +99,7 @@ pub(crate) trait StoreAccess {
     /// `Arc` and the resulting mutex guard has no lifetime requirements.
     ///
     /// This function does not block.
-    fn try_get_store(&self) -> Option<ArcMutexGuard<RawMutex, StoreInner>> {
+    fn try_get_store(&self) -> Option<StoreArcMutexGuard> {
         let inner = self.get_inner();
         inner.try_lock_arc()
     }
@@ -109,7 +115,7 @@ pub(crate) trait StoreAccess {
     ///
     /// Returned ArcMutexGuard needs to be dropped when done with.
     /// Don't go passing it around causing deadlocks and such.
-    fn try_get_store_timeout(&self, duration: Duration) -> Option<ArcMutexGuard<RawMutex, StoreInner>> {
+    fn try_get_store_timeout(&self, duration: Duration) -> Option<StoreArcMutexGuard> {
         let inner = self.get_inner();
         inner.try_lock_arc_for(duration)
     }
@@ -127,7 +133,7 @@ pub(crate) trait StoreAccess {
         };
 
         let cloned_token = token.clone();
-        let h = self.rt().spawn(async move {
+        let _ = self.rt().spawn(async move {
             select! {
                 _ = cloned_token.cancelled() => {}
                 _ = f => {}
@@ -247,7 +253,113 @@ impl StoreAccess for StoreHandle {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::Duration;
+    use crate::observable::{Observe, ObserveCloned};
+    use crate::store::{Manager, Store, StoreAccess};
 
+    #[test]
+    fn it_gets_parking_lot_lock() {
+        let store = Store::new();
+        assert!(store.try_get_store().is_some())
+    }
+
+    #[test]
+    fn it_returns_none_when_locked() {
+        let store = Store::new();
+        // Holding lock
+        let _lock = store.get_store();
+        // None because lock not available
+        assert!(store.try_get_store().is_none())
+    }
+
+    #[test]
+    fn it_returns_none_until_timeout() {
+        let store = Store::new();
+        let duration = Duration::from_millis(1000);
+        {
+            let lock = store.get_store();
+            assert!(store.try_get_store_timeout(duration).is_none());
+        }
+        assert!(store.try_get_store_timeout(duration).is_some())
+    }
+
+    #[derive(PartialEq, Debug, Copy, Clone)]
+    struct TestTypeOne(i32);
+
+    #[test]
+    fn it_gets_type() {
+        let store = Store::new();
+        let one_a = TestTypeOne(50);
+        assert!(store.set(one_a));
+        let one_b = store.get::<Arc<TestTypeOne>>();
+        assert_eq!(one_a, **one_b)
+    }
+
+    #[test]
+    fn it_creates_mutable() {
+        let store = Store::new();
+        let mutable = store.new_mutable(50);
+        assert_eq!(mutable.get(), 50)
+    }
+
+    #[test]
+    fn it_derives_observable_from_mutable() {
+        let store = Store::new();
+        let mutable = store.new_mutable(50);
+        let observable = mutable.observe(|source| source + 20 );
+        mutable.set(100);
+
+        thread::sleep(Duration::from_millis(500));
+
+        assert_eq!(observable.get(), 120)
+    }
+
+    #[test]
+    fn it_derives_observable_cloned_from_mutable() {
+        let store = Store::new();
+        let mutable = store.new_mutable("hello".to_string());
+        let observable = mutable.observe_cloned(|source| {
+            format!("{}, general kenobi", source)
+        });
+        mutable.set(format!("{} there", mutable.get_cloned()));
+
+        thread::sleep(Duration::from_millis(500));
+
+        assert_eq!(observable.get_cloned(), "hello there, general kenobi".to_string())
+    }
+
+    #[test]
+    fn it_derives_observable_from_observable() {
+        let store = Store::new();
+        let mutable = store.new_mutable(50);
+        let observable_one = mutable.observe(|source| source + 20);
+        let observable_two = observable_one.observe(|source| source + 30);
+
+        mutable.set(100);
+        thread::sleep(Duration::from_millis(500));
+        assert_eq!(observable_two.get(), 150);
+    }
+
+    #[test]
+    fn it_derives_observable_cloned_from_observable() {
+        let store = Store::new();
+        let mutable = store.new_mutable("hello".to_string());
+        let observable_one = mutable.observe_cloned(|source| {
+            format!("{}, general kenobi", source)
+        });
+        let observable_two = observable_one.observe_cloned(|source| {
+            format!("{}, nice to see you", source)
+        });
+
+        mutable.set(format!("{} there", mutable.get_cloned()));
+        thread::sleep(Duration::from_millis(500));
+        assert_eq!(observable_two.get_cloned(), "hello there, general kenobi, nice to see you".to_string())
+    }
+}
 
 // /// Controls access to internal store by controlling
 // /// access to mutex lock
@@ -470,110 +582,3 @@ impl StoreAccess for StoreHandle {
 //         self.spawned_futs.remove(s);
 //     }
 // }
-
-#[cfg(test)]
-mod tests {
-    use std::thread;
-    use std::time::Duration;
-    use crate::observable::{Observe, ObserveCloned};
-    use crate::store::{Manager, Store, StoreAccess};
-
-    #[test]
-    fn it_gets_parking_lot_lock() {
-        let store = Store::new();
-        assert!(store.try_get_store().is_some())
-    }
-
-    #[test]
-    fn it_returns_none_when_locked() {
-        let store = Store::new();
-        // Holding lock
-        let _lock = store.get_store();
-        // None because lock not available
-        assert!(store.try_get_store().is_none())
-    }
-
-    #[test]
-    fn it_returns_none_until_timeout() {
-        let store = Store::new();
-        let duration = Duration::from_millis(1000);
-        {
-            let lock = store.get_store();
-            assert!(store.try_get_store_timeout(duration).is_none());
-        }
-        assert!(store.try_get_store_timeout(duration).is_some())
-    }
-
-    #[derive(PartialEq, Debug, Copy, Clone)]
-    struct TestTypeOne(i32);
-
-    #[test]
-    fn it_gets_type() {
-        let store = Store::new();
-        let one_a = TestTypeOne(50);
-        store.set(one_a);
-        let one_b = store.get::<TestTypeOne>();
-        assert_eq!(one_a, *one_b)
-    }
-
-    #[test]
-    fn it_creates_mutable() {
-        let store = Store::new();
-        let mutable = store.create_mutable(50);
-        assert_eq!(mutable.get(), 50)
-    }
-
-    #[test]
-    fn it_derives_observable_from_mutable() {
-        let store = Store::new();
-        let mutable = store.create_mutable(50);
-        let observable = mutable.observe(|source| source + 20 );
-        mutable.set(100);
-
-        thread::sleep(Duration::from_millis(500));
-
-        assert_eq!(observable.get(), 120)
-    }
-
-    #[test]
-    fn it_derives_observable_cloned_from_mutable() {
-        let store = Store::new();
-        let mutable = store.create_mutable("hello".to_string());
-        let observable = mutable.observe_cloned(|source| {
-            format!("{}, general kenobi", source)
-        });
-        mutable.set(format!("{} there", mutable.get_cloned()));
-
-        thread::sleep(Duration::from_millis(500));
-
-        assert_eq!(observable.get_cloned(), "hello there, general kenobi".to_string())
-    }
-
-    #[test]
-    fn it_derives_observable_from_observable() {
-        let store = Store::new();
-        let mutable = store.create_mutable(50);
-        let observable_one = mutable.observe(|source| source + 20);
-        let observable_two = observable_one.observe(|source| source + 30);
-
-        mutable.set(100);
-        thread::sleep(Duration::from_millis(500));
-        assert_eq!(observable_two.get(), 150);
-    }
-
-    #[test]
-    fn it_derives_observable_cloned_from_observable() {
-        let store = Store::new();
-        let mutable = store.create_mutable("hello".to_string());
-        let observable_one = mutable.observe_cloned(|source| {
-            format!("{}, general kenobi", source)
-        });
-        let observable_two = observable_one.observe_cloned(|source| {
-            format!("{}, nice to see you", source)
-        });
-
-        mutable.set(format!("{} there", mutable.get_cloned()));
-        thread::sleep(Duration::from_millis(500));
-        assert_eq!(observable_two.get_cloned(), "hello there, general kenobi, nice to see you".to_string())
-    }
-}

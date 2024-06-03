@@ -74,7 +74,7 @@ pub trait Observe<A>: HasSignal<A> + HasStoreHandle
             F: Fn(<<Self as HasSignal<A>>::Return as Signal>::Item) -> U + Send + Sync + 'static
     {
         let mut store_handle = self.store_handle().clone();
-        let out = store_handle.create_mutable(U::default());
+        let out = store_handle.new_mutable(U::default());
         let out_mutable_clone = out.clone();
         let fut = self.signal().for_each(move |v| {
             out_mutable_clone.set(f(v));
@@ -103,7 +103,7 @@ pub trait ObserveCloned<A>: HasSignalCloned<A> + HasStoreHandle
             F: Fn(<<Self as HasSignalCloned<A>>::Return as Signal>::Item) -> U + Send + Sync + 'static
     {
         let mut store_handle = self.store_handle().clone();
-        let out = store_handle.create_mutable(U::default());
+        let out = store_handle.new_mutable(U::default());
         let out_mutable_clone = out.clone();
         let fut = self.signal_cloned().for_each(move |v| {
             out_mutable_clone.set(f(v));

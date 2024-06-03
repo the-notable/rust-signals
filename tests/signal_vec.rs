@@ -9,13 +9,13 @@ mod util;
 fn sync() {
     let store = Store::new();
     
-    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable_vec::<()>());
-    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable_vec::<()>().signal_vec());
-    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable_vec::<()>().signal_vec_cloned());
+    let _: Box<dyn Send + Sync> = Box::new(store.new_mutable_vec::<()>());
+    let _: Box<dyn Send + Sync> = Box::new(store.new_mutable_vec::<()>().signal_vec());
+    let _: Box<dyn Send + Sync> = Box::new(store.new_mutable_vec::<()>().signal_vec_cloned());
 
-    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable_vec_w_values::<()>(vec![]));
-    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable_vec_w_values::<()>(vec![]).signal_vec());
-    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable_vec_w_values::<()>(vec![]).signal_vec_cloned());
+    let _: Box<dyn Send + Sync> = Box::new(store.new_mutable_vec_w_values::<()>(vec![]));
+    let _: Box<dyn Send + Sync> = Box::new(store.new_mutable_vec_w_values::<()>(vec![]).signal_vec());
+    let _: Box<dyn Send + Sync> = Box::new(store.new_mutable_vec_w_values::<()>(vec![]).signal_vec_cloned());
 }
 
 

@@ -1,9 +1,7 @@
 use std::future::Future;
-use crate::observable::Observable;
-use crate::signal::Signal;
 
 use crate::signal_map::MutableSignalMap;
-use crate::store::{Manager, SpawnedFutureKey, StoreAccess, StoreArcMutexGuard, StoreHandle};
+use crate::store::{SpawnedFutureKey, StoreHandle};
 
 pub trait SSS: Send + Sync + 'static {}
 
@@ -85,7 +83,7 @@ pub trait ObserveMapCloned<T, O, K, V, F, U>
     fn observe_map_cloned(&self, f: F) -> O;
 }
 
-pub trait IsObservable {
+pub(crate) trait IsObservable {
     type Inner;
 
     fn new_inner(store_handle: StoreHandle) -> Self::Inner;

@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
 // TODO use parking_lot ?
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::task::{Context, Poll, Waker};
-use crate::observable::{Observable, Observe, ObserveCloned};
 
+use crate::observable::{Observe, ObserveCloned};
 use crate::store::StoreHandle;
 use crate::traits::{HasSignal, HasSignalCloned, HasStoreHandle};
 
@@ -378,7 +378,7 @@ impl<A> Mutable<A> {
 //     }
 // }
 
-impl<A> ::std::ops::Deref for Mutable<A> {
+impl<A> Deref for Mutable<A> {
     type Target = ReadOnlyMutable<A>;
 
     #[inline]
@@ -517,7 +517,7 @@ mod tests {
     #[test]
     fn it_clones() {
         let store = Store::new();
-        let mutable = store.create_mutable(50);
+        let mutable = store.new_mutable(50);
         
         //let mutable = Mutable::new(50);
         let mutable_clone = mutable.clone();

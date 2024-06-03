@@ -10,7 +10,7 @@ use futures_util::stream;
 use futures_util::stream::StreamExt;
 use pin_project::pin_project;
 
-use crate::signal::{Signal, Mutable, ReadOnlyMutable};
+use crate::signal::Signal;
 
 
 // TODO make this non-exhaustive
@@ -2984,7 +2984,7 @@ mod mutable_vec {
             let end = self.values.len();
             let range = Range {
                 start: len,
-                end: end,
+                end,
             };
             self.remove_range(range, end);
             self.values.truncate(len)

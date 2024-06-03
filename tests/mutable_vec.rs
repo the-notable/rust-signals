@@ -1,6 +1,7 @@
+use std::cmp::{Ordering, PartialOrd};
 use std::task::Poll;
-use std::cmp::{PartialOrd, Ordering};
-use rx_store::signal_vec::{VecDiff, MutableVec, MutableVecLockMut};
+
+use rx_store::signal_vec::{MutableVecLockMut, VecDiff};
 use rx_store::store::{Manager, Store};
 
 mod util;
@@ -10,7 +11,7 @@ fn is_eq<F>(input: Vec<u32>, output: Vec<u32>, f: F, polls: Vec<Poll<Option<VecD
     where F: FnOnce(&mut MutableVecLockMut<u32>) 
 {
     let store = Store::new();
-    let v = store.create_mutable_vec_w_values(input);
+    let v = store.new_mutable_vec_w_values(input);
 
     let mut end = None;
 
@@ -185,8 +186,8 @@ fn test_reverse() {
 #[test]
 fn test_eq() {
     let store = Store::new();
-    let a = store.create_mutable_vec_w_values(vec![1, 2, 3, 4, 5]);
-    let b = store.create_mutable_vec_w_values(vec![1, 2, 3, 4, 5]);
+    let a = store.new_mutable_vec_w_values(vec![1, 2, 3, 4, 5]);
+    let b = store.new_mutable_vec_w_values(vec![1, 2, 3, 4, 5]);
 
     assert_eq!(a.lock_ref(), b.lock_ref());
     assert_eq!(*a.lock_ref(), *b.lock_ref());
@@ -197,8 +198,8 @@ fn test_eq() {
 #[test]
 fn test_ord() {
     let store = Store::new();
-    let a = store.create_mutable_vec_w_values(vec![1, 2, 3, 4, 5]);
-    let b = store.create_mutable_vec_w_values(vec![1, 2, 3, 4, 5]);
+    let a = store.new_mutable_vec_w_values(vec![1, 2, 3, 4, 5]);
+    let b = store.new_mutable_vec_w_values(vec![1, 2, 3, 4, 5]);
 
     let b = b.lock_ref();
 
@@ -283,7 +284,7 @@ fn test_drain() {
 #[should_panic(expected = "slice index starts at 1 but ends at 0")]
 fn test_drain_panic_start() {
     let store = Store::new();
-    store.create_mutable_vec_w_values::<usize>(vec![]).lock_mut().drain(1..);
+    store.new_mutable_vec_w_values::<usize>(vec![]).lock_mut().drain(1..);
     //MutableVec::<usize>::new_with_values(vec![]).lock_mut().drain(1..);
 }
 
@@ -292,14 +293,14 @@ fn test_drain_panic_start() {
 fn test_drain_panic_end() {
     let store = Store::new();
     //MutableVec::<usize>::new_with_values(vec![5]).lock_mut().drain(0..2);
-    store.create_mutable_vec_w_values::<usize>(vec![5]).lock_mut().drain(0..2);
+    store.new_mutable_vec_w_values::<usize>(vec![5]).lock_mut().drain(0..2);
 }
 
 #[test]
 #[should_panic(expected = "slice index starts at 1 but ends at 0")]
 fn test_drain_panic_swap() {
     let store = Store::new();
-    store.create_mutable_vec_w_values::<usize>(vec![5]).lock_mut().drain(1..0);
+    store.new_mutable_vec_w_values::<usize>(vec![5]).lock_mut().drain(1..0);
     //MutableVec::<usize>::new_with_values(vec![5]).lock_mut().drain(1..0);
 }
 
@@ -307,7 +308,7 @@ fn test_drain_panic_swap() {
 #[should_panic(expected = "attempted to index slice up to maximum usize")]
 fn test_drain_panic_included_end() {
     let store = Store::new();
-    store.create_mutable_vec_w_values::<usize>(vec![]).lock_mut().drain(..=usize::MAX);
+    store.new_mutable_vec_w_values::<usize>(vec![]).lock_mut().drain(..=usize::MAX);
     //MutableVec::<usize>::new_with_values(vec![]).lock_mut().drain(..=usize::MAX);
 }
 

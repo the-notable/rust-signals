@@ -84,7 +84,7 @@ fn test_throttle_timing() {
     }
 
     let called = Rc::new(Called {
-        ready: store.create_mutable(true),
+        ready: store.new_mutable(true),
         function: Cell::new(0),
         future: Cell::new(0),
     });

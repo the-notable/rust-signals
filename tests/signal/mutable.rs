@@ -1,15 +1,16 @@
 use std::task::Poll;
+
 use rx_store::cancelable_future;
-use rx_store::signal::{SignalExt, Mutable, channel};
+use rx_store::signal::{channel, SignalExt};
 use rx_store::store::{Manager, Store};
 use rx_store::traits::{HasSignal, HasSignalCloned};
-use crate::util;
 
+use crate::util;
 
 #[test]
 fn test_mutable() {
     let store = Store::new();
-    let mutable = store.create_mutable(1);
+    let mutable = store.new_mutable(1);
     let mut s1 = mutable.signal();
     let mut s2 = mutable.signal_cloned();
 
@@ -37,7 +38,7 @@ fn test_mutable_drop() {
     let store = Store::new();
     
     {
-        let mutable = store.create_mutable(1);
+        let mutable = store.new_mutable(1);
         let mut s1 = mutable.signal();
         let mut s2 = mutable.signal_cloned();
         drop(mutable);
@@ -51,7 +52,7 @@ fn test_mutable_drop() {
     }
 
     {
-        let mutable = store.create_mutable(1);
+        let mutable = store.new_mutable(1);
         let mut s1 = mutable.signal();
         let mut s2 = mutable.signal_cloned();
 
@@ -72,7 +73,7 @@ fn test_mutable_drop() {
     }
 
     {
-        let mutable = store.create_mutable(1);
+        let mutable = store.new_mutable(1);
         let mut s1 = mutable.signal();
         let mut s2 = mutable.signal_cloned();
 
@@ -103,9 +104,9 @@ fn test_send_sync() {
     let _: Box<dyn Send + Sync> = Box::new(a.0);
     let _: Box<dyn Send + Sync> = Box::new(a.1);
 
-    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable(1));
-    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable(1).signal());
-    let _: Box<dyn Send + Sync> = Box::new(store.create_mutable(1).signal_cloned());
+    let _: Box<dyn Send + Sync> = Box::new(store.new_mutable(1));
+    let _: Box<dyn Send + Sync> = Box::new(store.new_mutable(1).signal());
+    let _: Box<dyn Send + Sync> = Box::new(store.new_mutable(1).signal_cloned());
 
     let a = channel(1);
     let _: Box<dyn Send + Sync> = Box::new(a.0);
@@ -118,7 +119,7 @@ fn test_lock_mut() {
     let store = Store::new();
     
     {
-        let m = store.create_mutable(1);
+        let m = store.new_mutable(1);
 
         let polls = util::get_signal_polls(m.signal(), move || {
             let mut lock = m.lock_mut();
@@ -136,7 +137,7 @@ fn test_lock_mut() {
     }
 
     {
-        let m = store.create_mutable(1);
+        let m = store.new_mutable(1);
 
         let polls = util::get_signal_polls(m.signal(), move || {
             let mut lock = m.lock_mut();

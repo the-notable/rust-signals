@@ -1,7 +1,9 @@
-use rx_store::map_ref;
-use rx_store::signal::{SignalExt, Mutable, Broadcaster, always, from_stream};
-use futures_executor::block_on_stream;
 use std::task::Poll;
+
+use futures_executor::block_on_stream;
+
+use rx_store::map_ref;
+use rx_store::signal::{always, Broadcaster, from_stream, SignalExt};
 use rx_store::store::{Manager, Store};
 use rx_store::traits::HasSignal;
 
@@ -12,7 +14,7 @@ mod util;
 fn test_broadcaster() {
     let store = Store::new();
     
-    let mutable = store.create_mutable(1);
+    let mutable = store.new_mutable(1);
     let broadcaster = Broadcaster::new(mutable.signal());
     let mut b1 = broadcaster.signal();
     let mut b2 = broadcaster.signal_cloned();
@@ -41,7 +43,7 @@ fn test_broadcaster() {
 #[test]
 fn test_polls() {
     let store = Store::new();
-    let mutable = store.create_mutable(1);
+    let mutable = store.new_mutable(1);
     let broadcaster = Broadcaster::new(mutable.signal());
     let signal1 = broadcaster.signal();
     let signal2 = broadcaster.signal();
@@ -98,7 +100,7 @@ fn test_broadcaster_always() {
 #[test]
 fn test_broadcaster_drop() {
     let store = Store::new();
-    let mutable = store.create_mutable(1);
+    let mutable = store.new_mutable(1);
     let broadcaster = Broadcaster::new(mutable.signal());
     let mut signal = broadcaster.signal();
     util::with_noop_context(|cx| {
@@ -112,7 +114,7 @@ fn test_broadcaster_drop() {
 #[test]
 fn test_broadcaster_multiple() {
     let store = Store::new();
-    let mutable = store.create_mutable(1);
+    let mutable = store.new_mutable(1);
     let broadcaster = Broadcaster::new(mutable.signal());
     let mut signal1 = broadcaster.signal();
     let mut signal2 = broadcaster.signal();
@@ -129,7 +131,7 @@ fn test_broadcaster_multiple() {
 #[test]
 fn test_block_on_stream() {
     let store = Store::new();
-    let observable = store.create_mutable(1);
+    let observable = store.new_mutable(1);
     let signal_from_stream = observable.signal();
 
     let broadcaster = Broadcaster::new(signal_from_stream);
@@ -144,7 +146,7 @@ fn test_block_on_stream() {
 #[test]
 fn test_block_on_stream_wrapper() {
     let store = Store::new();
-    let observable = store.create_mutable(1);
+    let observable = store.new_mutable(1);
     let signal_from_stream = from_stream(observable.signal().to_stream());
 
     let broadcaster = Broadcaster::new(signal_from_stream);

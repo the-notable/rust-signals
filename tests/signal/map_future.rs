@@ -1,17 +1,19 @@
-use std::rc::Rc;
 use std::cell::Cell;
+use std::rc::Rc;
 use std::task::Poll;
-use rx_store::signal::{SignalExt, Mutable};
+
 use futures_util::future::poll_fn;
+
+use rx_store::signal::SignalExt;
 use rx_store::store::{Manager, Store};
 use rx_store::traits::HasSignal;
-use crate::util;
 
+use crate::util;
 
 #[test]
 fn test_map_future() {
     let store = Store::new();
-    let mutable = Rc::new(store.create_mutable(1));
+    let mutable = Rc::new(store.new_mutable(1));
 
     let first = Rc::new(Cell::new(true));
 
