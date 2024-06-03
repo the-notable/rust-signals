@@ -1,7 +1,9 @@
 use std::future::Future;
+use crate::observable::Observable;
+use crate::signal::Signal;
 
 use crate::signal_map::MutableSignalMap;
-use crate::store::{SpawnedFutureKey, StoreArcMutexGuard, StoreHandle};
+use crate::store::{Manager, SpawnedFutureKey, StoreAccess, StoreArcMutexGuard, StoreHandle};
 
 pub trait SSS: Send + Sync + 'static {}
 
@@ -51,9 +53,15 @@ pub trait Provider {
     fn fut_key(&self) -> Option<SpawnedFutureKey>;
 }
 
+// pub trait Observe {
+//     fn observe<U, F, I>(&self, f: F) -> Observable<U> where F: Fn(I) -> U + Send + Sync + 'static;
+// }
+
+//pub trait OutputMap<K, V>
+
 pub trait ObserveMap<T, O, K, V, F, U>
     where
-        T: HasSignalMap<K, V> + Provider,
+        Self: HasSignalMap<K, V> + Provider + HasStoreHandle,
         O: IsObservable,
         <O as IsObservable>::Inner: Clone,
         K: Copy + Ord,
@@ -61,12 +69,12 @@ pub trait ObserveMap<T, O, K, V, F, U>
         F: Fn(MutableSignalMap<K, V>, <O as IsObservable>::Inner) -> U,
         U: Future<Output = ()>  + Send + 'static
 {
-    fn observe_map(input: T, store_ref: StoreArcMutexGuard, f: F) -> O;
+    fn observe_map(&self, f: F) -> O;
 }
 
 pub trait ObserveMapCloned<T, O, K, V, F, U>
     where
-        T: HasSignalMapCloned<K, V> + Provider,
+        T: HasSignalMapCloned<K, V> + Provider + HasStoreHandle,
         O: IsObservable,
         <O as IsObservable>::Inner: Clone,
         K: Clone + Ord,
@@ -74,15 +82,15 @@ pub trait ObserveMapCloned<T, O, K, V, F, U>
         F: Fn(MutableSignalMap<K, V>, <O as IsObservable>::Inner) -> U,
         U: Future<Output = ()>  + Send + 'static
 {
-    fn observe_map_cloned(input: T, store_ref: StoreArcMutexGuard, f: F) -> O;
+    fn observe_map_cloned(&self, f: F) -> O;
 }
 
 pub trait IsObservable {
     type Inner;
 
-    fn new_inner() -> Self::Inner;
+    fn new_inner(store_handle: StoreHandle) -> Self::Inner;
 
-    fn new(inner: Self::Inner, fut_key: SpawnedFutureKey) -> Self;
+    fn new(store_handle: StoreHandle, inner: Self::Inner, fut_key: SpawnedFutureKey) -> Self;
 }
 
 pub trait HasSpawnedFutureKey {
