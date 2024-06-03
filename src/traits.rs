@@ -1,7 +1,8 @@
 use std::future::Future;
+use crate::signal::{Signal, SignalExt};
 
 use crate::signal_map::MutableSignalMap;
-use crate::store::{SpawnedFutureKey, StoreHandle};
+use crate::store::{SpawnedFutureKey, StoreAccess, StoreHandle};
 
 pub trait SSS: Send + Sync + 'static {}
 
@@ -49,6 +50,31 @@ pub(crate) trait HasStoreHandle {
 
 pub trait Provider {
     fn fut_key(&self) -> Option<SpawnedFutureKey>;
+
+    fn store_handle(&self) -> &StoreHandle;
+
+    fn register_effectt<T, F, U>(&self, f: F) -> Result<SpawnedFutureKey, &'static str>
+        where
+            T: Copy,
+            F: Fn(U) + Send + 'static;
+    
+    fn register_effect<T, F>(&self, f: F) -> Result<SpawnedFutureKey, &'static str>
+        where 
+            T: Copy,
+            Self: HasSignal<T>,
+            <Self as HasSignal<T>>::Return: Signal + Send + 'static,
+            F: Fn(<<Self as HasSignal<T>>::Return as Signal>::Item) + Send + 'static
+    {
+        //let source_cloned = source.clone();
+        let fut = self.signal().for_each(move |v| {
+            f(v);
+            async {}
+        });
+
+        let mut lock = self.store_handle().clone();
+        let key = lock.spawn_fut(self.fut_key(), fut);
+        Ok(key)
+    }
 }
 
 // pub trait Observe {
@@ -59,7 +85,7 @@ pub trait Provider {
 
 pub trait ObserveMap<T, O, K, V, F, U>
     where
-        Self: HasSignalMap<K, V> + Provider + HasStoreHandle,
+        Self: HasSignalMap<K, V> + Provider,
         O: IsObservable,
         <O as IsObservable>::Inner: Clone,
         K: Copy + Ord,
@@ -72,7 +98,7 @@ pub trait ObserveMap<T, O, K, V, F, U>
 
 pub trait ObserveMapCloned<T, O, K, V, F, U>
     where
-        T: HasSignalMapCloned<K, V> + Provider + HasStoreHandle,
+        T: HasSignalMapCloned<K, V> + Provider,
         O: IsObservable,
         <O as IsObservable>::Inner: Clone,
         K: Clone + Ord,

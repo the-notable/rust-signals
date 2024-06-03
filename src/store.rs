@@ -145,21 +145,21 @@ pub(crate) trait StoreAccess {
 }
 
 #[derive(Debug)]
-pub struct Store {
+pub struct RxStore {
     rt: Runtime,
     store: Arc<Mutex<StoreInner>>,
     handle: StoreHandle
 }
 
-impl Store {
-    pub fn new() -> Store {
+impl RxStore {
+    pub fn new() -> RxStore {
         let rt = Builder::new_multi_thread()
             .build()
             .unwrap();
         
         let store = Arc::new(Mutex::new(StoreInner::new()));
         let handle = StoreHandle::new(rt.handle().clone(), store.clone());
-        Store {
+        RxStore {
             rt,
             store,
             handle,
@@ -167,15 +167,15 @@ impl Store {
     }
 }
 
-impl HasStoreHandle for Store {
+impl HasStoreHandle for RxStore {
     fn store_handle(&self) -> &StoreHandle {
         &self.handle
     }
 }
 
-impl Manager for Store {}
+impl Manager for RxStore {}
 
-impl StoreAccess for Store {
+impl StoreAccess for RxStore {
     fn rt(&self) -> &Handle {
         self.rt.handle()
     }
@@ -212,7 +212,7 @@ impl StoreInner {
 }
 
 #[derive(Debug)]
-pub(crate) struct StoreHandle {
+pub struct StoreHandle {
     rt: Handle,
     store: Arc<Mutex<StoreInner>>
 }
@@ -259,17 +259,17 @@ mod tests {
     use std::thread;
     use std::time::Duration;
     use crate::observable::{Observe, ObserveCloned};
-    use crate::store::{Manager, Store, StoreAccess};
+    use crate::store::{Manager, RxStore, StoreAccess};
 
     #[test]
     fn it_gets_parking_lot_lock() {
-        let store = Store::new();
+        let store = RxStore::new();
         assert!(store.try_get_store().is_some())
     }
 
     #[test]
     fn it_returns_none_when_locked() {
-        let store = Store::new();
+        let store = RxStore::new();
         // Holding lock
         let _lock = store.get_store();
         // None because lock not available
@@ -278,7 +278,7 @@ mod tests {
 
     #[test]
     fn it_returns_none_until_timeout() {
-        let store = Store::new();
+        let store = RxStore::new();
         let duration = Duration::from_millis(1000);
         {
             let lock = store.get_store();
@@ -292,7 +292,7 @@ mod tests {
 
     #[test]
     fn it_gets_type() {
-        let store = Store::new();
+        let store = RxStore::new();
         let one_a = TestTypeOne(50);
         assert!(store.set(one_a));
         let one_b = store.get::<Arc<TestTypeOne>>();
@@ -301,14 +301,14 @@ mod tests {
 
     #[test]
     fn it_creates_mutable() {
-        let store = Store::new();
+        let store = RxStore::new();
         let mutable = store.new_mutable(50);
         assert_eq!(mutable.get(), 50)
     }
 
     #[test]
     fn it_derives_observable_from_mutable() {
-        let store = Store::new();
+        let store = RxStore::new();
         let mutable = store.new_mutable(50);
         let observable = mutable.observe(|source| source + 20 );
         mutable.set(100);
@@ -320,7 +320,7 @@ mod tests {
 
     #[test]
     fn it_derives_observable_cloned_from_mutable() {
-        let store = Store::new();
+        let store = RxStore::new();
         let mutable = store.new_mutable("hello".to_string());
         let observable = mutable.observe_cloned(|source| {
             format!("{}, general kenobi", source)
@@ -334,7 +334,7 @@ mod tests {
 
     #[test]
     fn it_derives_observable_from_observable() {
-        let store = Store::new();
+        let store = RxStore::new();
         let mutable = store.new_mutable(50);
         let observable_one = mutable.observe(|source| source + 20);
         let observable_two = observable_one.observe(|source| source + 30);
@@ -346,7 +346,7 @@ mod tests {
 
     #[test]
     fn it_derives_observable_cloned_from_observable() {
-        let store = Store::new();
+        let store = RxStore::new();
         let mutable = store.new_mutable("hello".to_string());
         let observable_one = mutable.observe_cloned(|source| {
             format!("{}, general kenobi", source)

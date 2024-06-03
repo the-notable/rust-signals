@@ -5,14 +5,14 @@ use std::task::Poll;
 use futures_util::future::poll_fn;
 
 use rx_store::signal::SignalExt;
-use rx_store::store::{Manager, Store};
+use rx_store::store::{Manager, RxStore};
 use rx_store::traits::HasSignal;
 
 use crate::util;
 
 #[test]
 fn test_map_future() {
-    let store = Store::new();
+    let store = RxStore::new();
     let mutable = Rc::new(store.new_mutable(1));
 
     let first = Rc::new(Cell::new(true));

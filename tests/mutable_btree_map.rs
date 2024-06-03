@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::task::Poll;
 use rx_store::signal_map::{MapDiff, MutableBTreeMap, MutableBTreeMapLockMut};
-use rx_store::store::{Manager, Store};
+use rx_store::store::{Manager, RxStore};
 use rx_store::traits::{HasSignalMap, HasSignalMapCloned};
 
 mod util;
@@ -16,7 +16,7 @@ fn emits_diffs<K, V, F>(f: F, polls: Vec<Poll<Option<MapDiff<K, V>>>>)
           K: Ord + Copy + std::fmt::Debug,
           V: PartialEq + Copy + std::fmt::Debug 
 {
-    let store = Store::new();
+    let store = RxStore::new();
     let map = store.new_mutable_btree_map::<K, V>();
     //let map = MutableBTreeMap::<K, V>::new();
     assert_eq!(util::get_signal_map_polls(map.signal_map(), || {
@@ -33,7 +33,7 @@ fn emits_diffs_cloned<K, V, F>(f: F, polls: Vec<Poll<Option<MapDiff<K, V>>>>)
           K: Ord + Clone + std::fmt::Debug,
           V: PartialEq + Clone + std::fmt::Debug 
 {
-    let store = Store::new();
+    let store = RxStore::new();
     let map = store.new_mutable_btree_map::<K, V>();
     //let map = MutableBTreeMap::<K, V>::new();
     assert_eq!(util::get_signal_map_polls(map.signal_map_cloned(), || {
@@ -62,7 +62,7 @@ fn emits_diffs_cloned<K, V, F>(f: F, polls: Vec<Poll<Option<MapDiff<K, V>>>>)
 
 #[test]
 fn insert_and_remove() {
-    let store = Store::new();
+    let store = RxStore::new();
     let m = store.new_mutable_btree_map::<u8, i8>();
     //let m = MutableBTreeMap::<u8, i8>::new();
     let mut writer = m.lock_mut();
@@ -78,7 +78,7 @@ fn insert_and_remove() {
 
 #[test]
 fn clear() {
-    let store = Store::new();
+    let store = RxStore::new();
     let m = store.new_mutable_btree_map::<u8, i8>();
     //let m = MutableBTreeMap::<u8, i8>::new();
     let mut writer = m.lock_mut();
@@ -91,7 +91,7 @@ fn clear() {
 
 #[test]
 fn insert_cloned() {
-    let store = Store::new();
+    let store = RxStore::new();
     let m = store.new_mutable_btree_map::<&'static str, TestValueType>();
     //let m = MutableBTreeMap::<&'static str, TestValueType>::new();
     let mut writer = m.lock_mut();
@@ -127,7 +127,7 @@ fn signal_map_cloned() {
 
 #[test]
 fn is_from_btreemap() {
-    let store = Store::new();
+    let store = RxStore::new();
     let src = BTreeMap::from([(1,"test".to_string())]);
     let _out: MutableBTreeMap<u8, String> = store.new_mutable_btree_map_w_values(src);
     

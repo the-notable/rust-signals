@@ -4,7 +4,7 @@ use std::task::Poll;
 use rx_store::signal::{Signal, SignalExt, Mutable};
 use futures_util::future::poll_fn;
 use pin_utils::pin_mut;
-use rx_store::store::{Manager, Store};
+use rx_store::store::{Manager, RxStore};
 use rx_store::traits::HasSignal;
 use crate::util;
 
@@ -66,7 +66,7 @@ fn test_throttle() {
 
 #[test]
 fn test_throttle_timing() {
-    let store = Store::new();
+    let store = RxStore::new();
     
     let input = util::Source::new(vec![
         Poll::Ready(0),

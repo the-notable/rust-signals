@@ -1,13 +1,13 @@
 use std::task::Poll;
 use rx_store::signal_vec::{MutableVec, SignalVecExt, VecDiff, from_stream};
-use rx_store::store::{Manager, Store};
+use rx_store::store::{Manager, RxStore};
 
 mod util;
 
 
 #[test]
 fn sync() {
-    let store = Store::new();
+    let store = RxStore::new();
     
     let _: Box<dyn Send + Sync> = Box::new(store.new_mutable_vec::<()>());
     let _: Box<dyn Send + Sync> = Box::new(store.new_mutable_vec::<()>().signal_vec());

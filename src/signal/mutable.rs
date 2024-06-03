@@ -277,7 +277,7 @@ pub struct Mutable<A>(ReadOnlyMutable<A>);
 
 impl<A> Mutable<A> {
     // TODO should this inline ?
-    pub fn new(value: A, store_handle: StoreHandle) -> Self {
+    pub(crate) fn new(value: A, store_handle: StoreHandle) -> Self {
         let state = Arc::new(
             MutableState {
                 senders: AtomicUsize::new(1),
@@ -512,11 +512,11 @@ impl<A: Clone> Signal for MutableSignalCloned<A> {
 
 #[cfg(test)]
 mod tests {
-    use crate::store::{Manager, Store};
+    use crate::store::{Manager, RxStore};
 
     #[test]
     fn it_clones() {
-        let store = Store::new();
+        let store = RxStore::new();
         let mutable = store.new_mutable(50);
         
         //let mutable = Mutable::new(50);

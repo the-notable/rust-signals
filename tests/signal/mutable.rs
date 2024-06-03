@@ -2,14 +2,14 @@ use std::task::Poll;
 
 use rx_store::cancelable_future;
 use rx_store::signal::{channel, SignalExt};
-use rx_store::store::{Manager, Store};
+use rx_store::store::{Manager, RxStore};
 use rx_store::traits::{HasSignal, HasSignalCloned};
 
 use crate::util;
 
 #[test]
 fn test_mutable() {
-    let store = Store::new();
+    let store = RxStore::new();
     let mutable = store.new_mutable(1);
     let mut s1 = mutable.signal();
     let mut s2 = mutable.signal_cloned();
@@ -35,7 +35,7 @@ fn test_mutable() {
 #[test]
 fn test_mutable_drop() {
 
-    let store = Store::new();
+    let store = RxStore::new();
     
     {
         let mutable = store.new_mutable(1);
@@ -98,7 +98,7 @@ fn test_mutable_drop() {
 
 #[test]
 fn test_send_sync() {
-    let store = Store::new();
+    let store = RxStore::new();
     
     let a = cancelable_future(async {}, || ());
     let _: Box<dyn Send + Sync> = Box::new(a.0);
@@ -116,7 +116,7 @@ fn test_send_sync() {
 // Verifies that lock_mut only notifies when it is mutated
 #[test]
 fn test_lock_mut() {
-    let store = Store::new();
+    let store = RxStore::new();
     
     {
         let m = store.new_mutable(1);

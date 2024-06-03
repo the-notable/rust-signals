@@ -4,7 +4,7 @@ use futures_executor::block_on_stream;
 
 use rx_store::map_ref;
 use rx_store::signal::{always, Broadcaster, from_stream, SignalExt};
-use rx_store::store::{Manager, Store};
+use rx_store::store::{Manager, RxStore};
 use rx_store::traits::HasSignal;
 
 mod util;
@@ -12,7 +12,7 @@ mod util;
 
 #[test]
 fn test_broadcaster() {
-    let store = Store::new();
+    let store = RxStore::new();
     
     let mutable = store.new_mutable(1);
     let broadcaster = Broadcaster::new(mutable.signal());
@@ -42,7 +42,7 @@ fn test_broadcaster() {
 
 #[test]
 fn test_polls() {
-    let store = Store::new();
+    let store = RxStore::new();
     let mutable = store.new_mutable(1);
     let broadcaster = Broadcaster::new(mutable.signal());
     let signal1 = broadcaster.signal();
@@ -99,7 +99,7 @@ fn test_broadcaster_always() {
 
 #[test]
 fn test_broadcaster_drop() {
-    let store = Store::new();
+    let store = RxStore::new();
     let mutable = store.new_mutable(1);
     let broadcaster = Broadcaster::new(mutable.signal());
     let mut signal = broadcaster.signal();
@@ -113,7 +113,7 @@ fn test_broadcaster_drop() {
 
 #[test]
 fn test_broadcaster_multiple() {
-    let store = Store::new();
+    let store = RxStore::new();
     let mutable = store.new_mutable(1);
     let broadcaster = Broadcaster::new(mutable.signal());
     let mut signal1 = broadcaster.signal();
@@ -130,7 +130,7 @@ fn test_broadcaster_multiple() {
 
 #[test]
 fn test_block_on_stream() {
-    let store = Store::new();
+    let store = RxStore::new();
     let observable = store.new_mutable(1);
     let signal_from_stream = observable.signal();
 
@@ -145,7 +145,7 @@ fn test_block_on_stream() {
 
 #[test]
 fn test_block_on_stream_wrapper() {
-    let store = Store::new();
+    let store = RxStore::new();
     let observable = store.new_mutable(1);
     let signal_from_stream = from_stream(observable.signal().to_stream());
 

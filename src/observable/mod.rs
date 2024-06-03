@@ -1,13 +1,34 @@
 use crate::signal::{Mutable, MutableSignal, MutableSignalCloned, Signal};
 use crate::store::{Manager, SpawnedFutureKey, StoreAccess, StoreHandle};
 use crate::signal::SignalExt;
-use crate::traits::{HasSignal, HasSignalCloned, HasSpawnedFutureKey, HasStoreHandle};
+use crate::traits::{HasSignal, HasSignalCloned, HasSpawnedFutureKey, Provider};
 
 #[derive(Debug, Clone)]
 pub struct Observable<T> {
     store_handle: StoreHandle,
     pub(crate) mutable: Mutable<T>,
     pub(crate) fut_key: SpawnedFutureKey
+}
+
+impl<T> Provider for Observable<T> {
+    fn fut_key(&self) -> Option<SpawnedFutureKey> {
+        Some(self.spawned_future_key())
+    }
+
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
+
+    fn register_effectt<R, F, U>(&self, f: F) -> Result<SpawnedFutureKey, &'static str> where R: Copy, F: Fn(U) + Send + 'static {
+        let fut = self.signal().for_each(move |v| {
+            f(v);
+            async {}
+        });
+
+        let mut lock = self.store_handle().clone();
+        let key = lock.spawn_fut(self.fut_key(), fut);
+        Ok(key)
+    }
 }
 
 impl<T> HasSpawnedFutureKey for Observable<T> {
@@ -19,12 +40,6 @@ impl<T> HasSpawnedFutureKey for Observable<T> {
 impl<T: Copy> Observable<T> {
     pub fn get(&self) -> T {
         self.mutable.get()
-    }
-}
-
-impl<A> HasStoreHandle for Observable<A> {
-    fn store_handle(&self) -> &StoreHandle {
-        &self.store_handle
     }
 }
 
@@ -62,7 +77,7 @@ impl<A: Clone> HasSignalCloned<A> for Observable<A> {
     }
 }
 
-pub trait Observe<A>: HasSignal<A> + HasStoreHandle
+pub trait Observe<A>: HasSignal<A>
     where
         <Self as HasSignal<A>>::Return: Signal + Send + Sync + 'static,
         A: Copy + Send + Sync + 'static
@@ -91,7 +106,7 @@ pub trait Observe<A>: HasSignal<A> + HasStoreHandle
     }
 }
 
-pub trait ObserveCloned<A>: HasSignalCloned<A> + HasStoreHandle
+pub trait ObserveCloned<A>: HasSignalCloned<A>
     where
         <Self as HasSignalCloned<A>>::Return: Signal + Send + Sync + 'static,
         A: Clone + Send + Sync + 'static
