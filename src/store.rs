@@ -7,7 +7,7 @@ use parking_lot::{Mutex, RawMutex};
 use parking_lot::lock_api::ArcMutexGuard;
 use slotmap::{new_key_type, SlotMap};
 use state::TypeMap;
-use tokio::runtime::{Builder, Handle, Runtime};
+use tokio::runtime::{Builder as TokioBuilder, Handle, Runtime};
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 
@@ -22,6 +22,34 @@ new_key_type! {
 
 pub(crate) type StorePtr = Arc<Mutex<StoreInner>>;
 pub(crate) type StoreArcMutexGuard = ArcMutexGuard<RawMutex, StoreInner>;
+
+pub struct Builder;
+
+impl Builder {
+    
+}
+
+pub struct MutableBuilder;
+
+pub struct MutableBTreeMapBuilder<T> {
+    store_handle: StoreHandle,
+    values: Option<T>
+}
+
+impl<T> MutableBTreeMapBuilder<T> {
+    pub fn with_values<K, V>(mut self, values: T) -> Self {
+        self.values = Some(values);
+        self
+    }
+    
+    pub fn build<K: Ord, V>(self) -> MutableBTreeMap<K, V> where BTreeMap<K, V>: From<T> {
+        if let Some(v) = self.values {
+            MutableBTreeMap::new_with_values(v, self.store_handle)
+        } else {
+            MutableBTreeMap::new(self.store_handle)
+        }
+    }
+}
 
 pub trait Manager: HasStoreHandle {
     fn set<T: Send + Sync + 'static>(&self, v: T) -> bool {
@@ -133,7 +161,7 @@ pub(crate) trait StoreAccess {
         };
 
         let cloned_token = token.clone();
-        let _ = self.rt().spawn(async move {
+        self.rt().spawn(async move {
             select! {
                 _ = cloned_token.cancelled() => {}
                 _ = f => {}
@@ -153,10 +181,16 @@ pub struct RxStore {
 
 impl RxStore {
     pub fn new() -> RxStore {
-        let rt = Builder::new_multi_thread()
+        Self::default()
+    }
+}
+
+impl Default for RxStore {
+    fn default() -> Self {
+        let rt = TokioBuilder::new_multi_thread()
             .build()
             .unwrap();
-        
+
         let store = Arc::new(Mutex::new(StoreInner::new()));
         let handle = StoreHandle::new(rt.handle().clone(), store.clone());
         RxStore {
@@ -239,7 +273,7 @@ impl Manager for StoreHandle {}
 
 impl HasStoreHandle for StoreHandle {
     fn store_handle(&self) -> &StoreHandle {
-        &self
+        self
     }
 }
 
@@ -282,7 +316,7 @@ mod tests {
         let store = RxStore::new();
         let duration = Duration::from_millis(1000);
         {
-            let lock = store.get_store();
+            let _lock = store.get_store();
             assert!(store.try_get_store_timeout(duration).is_none());
         }
         assert!(store.try_get_store_timeout(duration).is_some())

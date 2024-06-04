@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::task::Poll;
 use rx_store::signal_map::{MapDiff, MutableBTreeMap, MutableBTreeMapLockMut};
 use rx_store::store::{Manager, RxStore};
-use rx_store::traits::{HasSignalMap, HasSignalMapCloned};
+use rx_store::traits::{HasSignalMap};
 
 mod util;
 
@@ -36,7 +36,7 @@ fn emits_diffs_cloned<K, V, F>(f: F, polls: Vec<Poll<Option<MapDiff<K, V>>>>)
     let store = RxStore::new();
     let map = store.new_mutable_btree_map::<K, V>();
     //let map = MutableBTreeMap::<K, V>::new();
-    assert_eq!(util::get_signal_map_polls(map.signal_map_cloned(), || {
+    assert_eq!(util::get_signal_map_polls(map.signal_map(), || {
         {
             let mut v = map.lock_mut();
             f(&mut v);

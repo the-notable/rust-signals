@@ -262,7 +262,7 @@ impl<A> PendingBuilder<A> {
     }
 
     fn push(&mut self, value: A) {
-        if let None = self.first {
+        if self.first.is_none() {
             self.first = Some(value);
 
         } else {
@@ -605,7 +605,7 @@ mod mutable_btree_map {
 
     impl<K: Clone + Ord, V: Clone> MutableBTreeState<K, V> {
         fn entries(values: &BTreeMap<K, V>) -> Vec<(K, V)> {
-            values.into_iter().map(|(k, v)| {
+            values.iter().map(|(k, v)| {
                 (k.clone(), v.clone())
             }).collect()
         }
@@ -883,8 +883,8 @@ mod mutable_btree_map {
             None
         }
 
-        fn register_effectt<F>(&self, f: F)
-            -> Result<SpawnedFutureKey, &'static str> 
+        fn register_effect<F>(&self, f: F)
+                              -> Result<SpawnedFutureKey, &'static str> 
             where 
                 F: Fn(Self::YieldedValue) + Send + 'static 
         {
@@ -1134,7 +1134,7 @@ mod mutable_btree_map {
                 Some(self.fut_key)
             }
 
-            fn register_effectt<F>(&self, f: F) -> Result<SpawnedFutureKey, &'static str>
+            fn register_effect<F>(&self, f: F) -> Result<SpawnedFutureKey, &'static str>
                 where
                     F: Fn(Self::YieldedValue) + Send + 'static
             {

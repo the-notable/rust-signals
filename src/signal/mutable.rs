@@ -227,8 +227,8 @@ impl<A> Provider for ReadOnlyMutable<A> {
         None
     }
 
-    fn register_effectt<F>(&self, f: F) 
-        -> Result<SpawnedFutureKey, &'static str>
+    fn register_effect<F>(&self, f: F)
+                          -> Result<SpawnedFutureKey, &'static str>
         where 
             F: Fn(Self::YieldedValue) + Send + 'static 
     {
