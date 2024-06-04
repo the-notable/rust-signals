@@ -23,33 +23,36 @@ new_key_type! {
 pub(crate) type StorePtr = Arc<Mutex<StoreInner>>;
 pub(crate) type StoreArcMutexGuard = ArcMutexGuard<RawMutex, StoreInner>;
 
-pub struct Builder;
-
-impl Builder {
-    
-}
-
-pub struct MutableBuilder;
-
-pub struct MutableBTreeMapBuilder<T> {
-    store_handle: StoreHandle,
-    values: Option<T>
-}
-
-impl<T> MutableBTreeMapBuilder<T> {
-    pub fn with_values<K, V>(mut self, values: T) -> Self {
-        self.values = Some(values);
-        self
-    }
-    
-    pub fn build<K: Ord, V>(self) -> MutableBTreeMap<K, V> where BTreeMap<K, V>: From<T> {
-        if let Some(v) = self.values {
-            MutableBTreeMap::new_with_values(v, self.store_handle)
-        } else {
-            MutableBTreeMap::new(self.store_handle)
-        }
-    }
-}
+// #[derive(Debug)]
+// pub struct Builder;
+// 
+// impl Builder {
+//     
+// }
+// 
+// #[derive(Debug)]
+// pub struct MutableBuilder;
+// 
+// #[derive(Debug)]
+// pub struct MutableBTreeMapBuilder<T> {
+//     store_handle: StoreHandle,
+//     values: Option<T>
+// }
+// 
+// impl<T> MutableBTreeMapBuilder<T> {
+//     pub fn with_values<K, V>(mut self, values: T) -> Self {
+//         self.values = Some(values);
+//         self
+//     }
+//     
+//     pub fn build<K: Ord, V>(self) -> MutableBTreeMap<K, V> where BTreeMap<K, V>: From<T> {
+//         if let Some(v) = self.values {
+//             MutableBTreeMap::new_with_values(v, self.store_handle)
+//         } else {
+//             MutableBTreeMap::new(self.store_handle)
+//         }
+//     }
+// }
 
 pub trait Manager: HasStoreHandle {
     fn set<T: Send + Sync + 'static>(&self, v: T) -> bool {
