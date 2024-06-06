@@ -26,6 +26,7 @@ mod atomic;
 mod future;
 pub mod store;
 pub mod traits;
+mod new;
 
 pub use crate::future::{cancelable_future, CancelableFutureHandle, CancelableFuture};
 

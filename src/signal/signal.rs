@@ -6,9 +6,14 @@ use futures_core::stream::Stream;
 use futures_util::stream;
 use futures_util::stream::StreamExt;
 use pin_project::pin_project;
+use crate::observable::{Observable, Observe};
 
 use crate::signal::Broadcaster;
 use crate::signal_vec::{VecDiff, SignalVec};
+use crate::store::{Manager, StoreAccess, StoreHandle};
+use crate::traits::{HasSignal, HasStoreHandle, SSS};
+
+
 
 
 // TODO impl for AssertUnwindSafe ?
@@ -152,12 +157,13 @@ pub trait SignalExt: Signal {
     /// This is ***extremely*** efficient: it is *guaranteed* constant time, and it does not do
     /// any heap allocation.
     #[inline]
-    fn map<A, B>(self, callback: B) -> Map<Self, B>
+    fn map<A, B>(self, store_handle: StoreHandle, callback: B) -> Map<Self, B>
         where B: FnMut(Self::Item) -> A,
               Self: Sized {
         Map {
             signal: self,
             callback,
+            store_handle
         }
     }
 
@@ -434,15 +440,15 @@ pub trait SignalExt: Signal {
         }
     }
 
-    #[inline]
-    fn switch<A, B>(self, callback: B) -> Switch<Self, A, B>
-        where A: Signal,
-              B: FnMut(Self::Item) -> A,
-              Self: Sized {
-        Switch {
-            inner: self.map(callback).flatten()
-        }
-    }
+    // #[inline]
+    // fn switch<A, B>(self, callback: B) -> Switch<Self, A, B>
+    //     where A: Signal,
+    //           B: FnMut(Self::Item) -> A,
+    //           Self: Sized {
+    //     Switch {
+    //         inner: self.map(callback).flatten()
+    //     }
+    // }
 
     #[inline]
     fn switch_signal_vec<A, F>(self, callback: F) -> SwitchSignalVec<Self, A, F>
@@ -601,12 +607,12 @@ pub type BoxSignal<'a, T> = Pin<Box<dyn Signal<Item = T> + Send + 'a>>;
 pub type LocalBoxSignal<'a, T> = Pin<Box<dyn Signal<Item = T> + 'a>>;
 
 
-// TODO make this into a method later
-#[inline]
-pub fn not<A>(signal: A) -> impl Signal<Item = bool>
-    where A: Signal<Item = bool> {
-    signal.map(|x| !x)
-}
+// // TODO make this into a method later
+// #[inline]
+// pub fn not<A>(signal: A) -> impl Signal<Item = bool>
+//     where A: Signal<Item = bool> {
+//     signal.map(|x| !x)
+// }
 
 // TODO make this into a method later
 // TODO use short-circuiting if the left signal returns false ?
@@ -1076,7 +1082,74 @@ pub struct Map<A, B> {
     #[pin]
     signal: A,
     callback: B,
+    store_handle: StoreHandle
 }
+
+// impl<A, B, C> Map<A, B> 
+//     where 
+//         A: Signal + SSS,
+//         B: FnMut(A::Item) -> C + SSS,
+//         C: Default + SSS
+// {
+//     pub fn observe(self) -> Observable<C> {
+//         let mut store = self.store_handle.clone();
+//         let out = store.new_mutable(C::default());
+//         let out_mutable_clone = out.clone();
+//         let fut = self.for_each(move |v| {
+//             out_mutable_clone.set(v);
+//             async {}
+//         });
+// 
+//         let fut_key = store.spawn_fut(None, fut);
+//         Observable {
+//             store_handle: store,
+//             mutable: out,
+//             fut_key
+//         }
+//     }
+// }
+
+impl<A, B> HasStoreHandle for Map<A, B> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
+}
+
+// impl<A, B> ObserveSignal for Map<A, B>
+//     where
+//         Self: Signal + HasStoreHandle + Sized + SSS,
+//         <Self as Signal>::Item: Default + SSS
+// {
+//     
+// }
+
+pub trait ObserveSignal 
+    where 
+        Self: Signal + HasStoreHandle + Sized + SSS, 
+        <Self as Signal>::Item: Default + SSS
+{
+    fn observe(self) -> Observable<<Self as Signal>::Item> {
+        let mut store = self.store_handle().clone();
+        let out = store.new_mutable(<Self as Signal>::Item::default());
+        let out_mutable_clone = out.clone();
+        let fut = self.for_each(move |v| {
+            out_mutable_clone.set(v);
+            async {}
+        });
+
+        let fut_key = store.spawn_fut(None, fut);
+        Observable {
+            store_handle: store,
+            mutable: out,
+            fut_key
+        }
+    }
+}
+
+impl<T> ObserveSignal for T 
+    where 
+        T: Signal + HasStoreHandle + Sized + SSS,
+        <T as Signal>::Item: Default + SSS {}
 
 impl<A, B, C> Signal for Map<A, B>
     where A: Signal,
@@ -1085,7 +1158,7 @@ impl<A, B, C> Signal for Map<A, B>
 
     #[inline]
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let MapProj { signal, callback } = self.project();
+        let MapProj { signal, callback, store_handle } = self.project();
 
         signal.poll_change(cx).map(|opt| opt.map(|value| callback(value)))
     }

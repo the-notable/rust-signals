@@ -5,7 +5,7 @@ use crate::traits::{HasSignal, HasSpawnedFutureKey, HasStoreHandle, Provider, SS
 
 #[derive(Debug, Clone)]
 pub struct Observable<T> {
-    store_handle: StoreHandle,
+    pub(crate) store_handle: StoreHandle,
     pub(crate) mutable: Mutable<T>,
     pub(crate) fut_key: SpawnedFutureKey
 }

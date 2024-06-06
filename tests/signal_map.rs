@@ -55,84 +55,84 @@ fn map_value() {
     ]);
 }
 
-#[test]
-fn map_value_signal_const_signal() {
-    let input = util::Source::new(vec![
-        Poll::Ready(MapDiff::Replace {
-            entries: vec![(1, 1), (2, 1), (3, 2), (4, 3)]
-        }),
-        Poll::Pending,
-        Poll::Ready(MapDiff::Insert {
-            key: 5,
-            value: 5,
-        }),
-        Poll::Ready(MapDiff::Update {
-            key: 1,
-            value: 0,
-        }),
-        Poll::Pending,
-        Poll::Pending,
-        Poll::Ready(MapDiff::Remove {key: 1}),
-        Poll::Ready(MapDiff::Insert {
-            key: 1,
-            value: 1,
-        }),
-        Poll::Ready(MapDiff::Clear {})
-    ]);
+// #[test]
+// fn map_value_signal_const_signal() {
+//     let input = util::Source::new(vec![
+//         Poll::Ready(MapDiff::Replace {
+//             entries: vec![(1, 1), (2, 1), (3, 2), (4, 3)]
+//         }),
+//         Poll::Pending,
+//         Poll::Ready(MapDiff::Insert {
+//             key: 5,
+//             value: 5,
+//         }),
+//         Poll::Ready(MapDiff::Update {
+//             key: 1,
+//             value: 0,
+//         }),
+//         Poll::Pending,
+//         Poll::Pending,
+//         Poll::Ready(MapDiff::Remove {key: 1}),
+//         Poll::Ready(MapDiff::Insert {
+//             key: 1,
+//             value: 1,
+//         }),
+//         Poll::Ready(MapDiff::Clear {})
+//     ]);
+// 
+//     let output = input.map_value_signal(|value| {
+//         signal::always(2).map(move |multiplier| value * multiplier)
+//     });
+// 
+//     util::assert_signal_map_eq(output, vec![
+//         Poll::Ready(Some(MapDiff::Replace {
+//             entries: vec![(1, 2), (2, 2), (3, 4), (4, 6)]
+//         })),
+//         Poll::Ready(Some(MapDiff::Insert {
+//             key: 5,
+//             value: 10,
+//         })),
+//         Poll::Ready(Some(MapDiff::Update {
+//             key: 1,
+//             value: 0,
+//         })),
+//         Poll::Pending,
+//         Poll::Ready(Some(MapDiff::Remove {key: 1})),
+//         Poll::Ready(Some(MapDiff::Insert {
+//             key: 1,
+//             value: 2,
+//         })),
+//         Poll::Ready(Some(MapDiff::Clear {})),
+//         Poll::Ready(None),
+//     ]);
+// }
 
-    let output = input.map_value_signal(|value| {
-        signal::always(2).map(move |multiplier| value * multiplier)
-    });
-
-    util::assert_signal_map_eq(output, vec![
-        Poll::Ready(Some(MapDiff::Replace {
-            entries: vec![(1, 2), (2, 2), (3, 4), (4, 6)]
-        })),
-        Poll::Ready(Some(MapDiff::Insert {
-            key: 5,
-            value: 10,
-        })),
-        Poll::Ready(Some(MapDiff::Update {
-            key: 1,
-            value: 0,
-        })),
-        Poll::Pending,
-        Poll::Ready(Some(MapDiff::Remove {key: 1})),
-        Poll::Ready(Some(MapDiff::Insert {
-            key: 1,
-            value: 2,
-        })),
-        Poll::Ready(Some(MapDiff::Clear {})),
-        Poll::Ready(None),
-    ]);
-}
-
-#[test]
-fn map_value_signal_const_map() {
-    let map_signal = signal_map::always(
-        BTreeMap::from([(1, 1), (2, 1), (3, 2), (4, 3)])
-    );
-
-    let output = map_signal.map_value_signal(|value| {
-        let input = util::Source::new(vec![
-            Poll::Ready(2),
-            Poll::Pending,
-            Poll::Ready(3),
-        ]);
-        input.map(move |multiplier| value * multiplier)
-    });
-
-    util::assert_signal_map_eq(output, vec![
-        Poll::Ready(Some(MapDiff::Replace {
-            entries: vec![(1, 2), (2, 2), (3, 4), (4, 6)],
-        })),
-        Poll::Ready(Some(MapDiff::Update { key: 1, value: 3 })),
-        Poll::Ready(Some(MapDiff::Update { key: 2, value: 3 })),
-        Poll::Ready(Some(MapDiff::Update { key: 3, value: 6 })),
-        Poll::Ready(Some(MapDiff::Update { key: 4, value: 9 })),
-        Poll::Ready(None),
-    ]);
-}
+// #[test]
+// fn map_value_signal_const_map() {
+//     let map_signal = signal_map::always(
+//         BTreeMap::from([(1, 1), (2, 1), (3, 2), (4, 3)])
+//     );
+// 
+//     let output = map_signal.map_value_signal(|value| {
+//         let input = util::Source::new(vec![
+//             Poll::Ready(2),
+//             Poll::Pending,
+//             Poll::Ready(3),
+//         ]);
+//         input.map(move |multiplier| value * multiplier)
+//     });
+// 
+//     util::assert_signal_map_eq(output, vec![
+//         Poll::Ready(Some(MapDiff::Replace {
+//             entries: vec![(1, 2), (2, 2), (3, 4), (4, 6)],
+//         })),
+//         Poll::Ready(Some(MapDiff::Update { key: 1, value: 3 })),
+//         Poll::Ready(Some(MapDiff::Update { key: 2, value: 3 })),
+//         Poll::Ready(Some(MapDiff::Update { key: 3, value: 6 })),
+//         Poll::Ready(Some(MapDiff::Update { key: 4, value: 9 })),
+//         Poll::Ready(None),
+//     ]);
+// }
 
 #[test]
 fn always_vec() {

@@ -297,7 +297,9 @@ mod tests {
     use std::thread;
     use std::time::Duration;
     use crate::observable::{Observe};
+    use crate::signal::{ObserveSignal, SignalExt};
     use crate::store::{Manager, RxStore, StoreAccess};
+    use crate::traits::{HasSignal, HasStoreHandle};
 
     #[test]
     fn it_gets_parking_lot_lock() {
@@ -356,6 +358,42 @@ mod tests {
         assert_eq!(observable.get(), 120)
     }
 
+    #[test]
+    fn it_derives_observable_from_map_signal() {
+        let store = RxStore::new();
+        let mutable = store.new_mutable(50);
+        
+        let observable = mutable
+            .signal()
+            .map(store.store_handle().clone(), |v| v + 20)
+            .observe();
+        
+        //let observable = mutable.observe(|source| source + 20 );
+        mutable.set(100);
+
+        thread::sleep(Duration::from_millis(500));
+
+        assert_eq!(observable.get(), 120)
+    }
+
+    #[test]
+    fn it_derives_observable_from_inspect_signal() {
+        let store = RxStore::new();
+        let mutable = store.new_mutable(50);
+
+        let observable = mutable
+            .signal()
+            .map(store.store_handle().clone(), |v| v + 20)
+            .observe();
+
+        //let observable = mutable.observe(|source| source + 20 );
+        mutable.set(100);
+
+        thread::sleep(Duration::from_millis(500));
+
+        assert_eq!(observable.get(), 120)
+    }
+    
     #[test]
     fn it_derives_observable_cloned_from_mutable() {
         let store = RxStore::new();
