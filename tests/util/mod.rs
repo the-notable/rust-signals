@@ -12,6 +12,9 @@ use futures_util::future::poll_fn;
 use futures_util::task::{waker, ArcWake};
 use futures_executor::block_on;
 use pin_utils::pin_mut;
+use has_store_handle_macro::has_store_handle;
+use rx_store::traits::HasStoreHandle;
+use rx_store::store::StoreHandle;
 
 
 #[allow(dead_code)]
@@ -331,10 +334,9 @@ pub fn assert_signal_map_eq<K, V, S>(signal: S, expected: Vec<Poll<Option<MapDif
     );
 }
 
-
-
 #[allow(dead_code)]
 #[derive(Debug)]
+#[has_store_handle]
 #[must_use = "Source does nothing unless polled"]
 pub struct Source<A> {
     changes: Vec<Poll<A>>,
@@ -345,8 +347,8 @@ impl<A> Unpin for Source<A> {}
 impl<A> Source<A> {
     #[allow(dead_code)]
     #[inline]
-    pub fn new(changes: Vec<Poll<A>>) -> Self {
-        Self { changes }
+    pub fn new(changes: Vec<Poll<A>>, store_handle: StoreHandle) -> Self {
+        Self { changes, store_handle }
     }
 
     fn poll(&mut self, cx: &mut Context) -> Poll<Option<A>> {

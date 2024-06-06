@@ -11,10 +11,10 @@ use tokio::runtime::{Builder as TokioBuilder, Handle, Runtime};
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 
-use crate::signal::{Mutable};
+use crate::signal::Mutable;
 use crate::signal_map::MutableBTreeMap;
 use crate::signal_vec::MutableVec;
-use crate::traits::{HasStoreHandle};
+use crate::traits::HasStoreHandle;
 
 new_key_type! {
     pub struct SpawnedFutureKey;
@@ -296,10 +296,10 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
-    use crate::observable::{Observe};
+
     use crate::signal::{ObserveSignal, SignalExt};
     use crate::store::{Manager, RxStore, StoreAccess};
-    use crate::traits::{HasSignal, HasStoreHandle};
+    use crate::traits::HasSignal;
 
     #[test]
     fn it_gets_parking_lot_lock() {
@@ -350,7 +350,10 @@ mod tests {
     fn it_derives_observable_from_mutable() {
         let store = RxStore::new();
         let mutable = store.new_mutable(50);
-        let observable = mutable.observe(|source| source + 20 );
+        let observable = mutable
+            .signal()
+            .map(|v| v + 20)
+            .observe();
         mutable.set(100);
 
         thread::sleep(Duration::from_millis(500));
@@ -365,7 +368,7 @@ mod tests {
         
         let observable = mutable
             .signal()
-            .map(store.store_handle().clone(), |v| v + 20)
+            .map(|v| v + 20)
             .observe();
         
         //let observable = mutable.observe(|source| source + 20 );
@@ -383,7 +386,7 @@ mod tests {
 
         let observable = mutable
             .signal()
-            .map(store.store_handle().clone(), |v| v + 20)
+            .map(|v| v + 20)
             .observe();
 
         //let observable = mutable.observe(|source| source + 20 );
@@ -398,9 +401,10 @@ mod tests {
     fn it_derives_observable_cloned_from_mutable() {
         let store = RxStore::new();
         let mutable = store.new_mutable("hello".to_string());
-        let observable = mutable.deref().observe(|source| {
-            format!("{}, general kenobi", source)
-        });
+        let observable = mutable
+            .signal()
+            .map(|v| format!("{}, general kenobi", v))
+            .observe();
         mutable.set(format!("{} there", mutable.get_cloned()));
 
         thread::sleep(Duration::from_millis(500));
@@ -412,8 +416,15 @@ mod tests {
     fn it_derives_observable_from_observable() {
         let store = RxStore::new();
         let mutable = store.new_mutable(50);
-        let observable_one = mutable.observe(|source| source + 20);
-        let observable_two = observable_one.observe(|source| source + 30);
+        let observable_one = mutable
+            .signal()
+            .map(|v| v + 20)
+            .observe();
+        
+        let observable_two = observable_one
+            .signal()
+            .map(|v| v + 30)
+            .observe();
 
         mutable.set(100);
         thread::sleep(Duration::from_millis(500));
@@ -424,12 +435,16 @@ mod tests {
     fn it_derives_observable_cloned_from_observable() {
         let store = RxStore::new();
         let mutable = store.new_mutable("hello".to_string());
-        let observable_one = mutable.observe(|source| {
-            format!("{}, general kenobi", source)
-        });
-        let observable_two = observable_one.observe(|source| {
-            format!("{}, nice to see you", source)
-        });
+
+        let observable_one = mutable
+            .signal()
+            .map(|v| format!("{}, general kenobi", v))
+            .observe();
+
+        let observable_two = observable_one
+            .signal()
+            .map(|v| format!("{}, nice to see you", v))
+            .observe();
 
         mutable.set(format!("{} there", mutable.get_cloned()));
         thread::sleep(Duration::from_millis(500));

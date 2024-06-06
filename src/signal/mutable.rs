@@ -9,7 +9,6 @@ use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::task::{Context, Poll, Waker};
 
-use crate::observable::{Observe};
 use crate::store::{SpawnedFutureKey, StoreHandle};
 use crate::traits::{HasSignal, HasStoreHandle, Provider};
 
@@ -171,8 +170,9 @@ impl<'a, A> Deref for MutableLockRef<'a, A> {
 
 
 //#[repr(transparent)]
+#[has_store_handle_macro::has_store_handle]
 pub struct ReadOnlyMutable<A>{
-    store_handle: StoreHandle,
+    //store_handle: StoreHandle,
     state: Arc<MutableState<A>>
 }
 
@@ -208,17 +208,17 @@ impl<A: Clone> ReadOnlyMutable<A> {
     }
 }
 
-impl<A> HasStoreHandle for ReadOnlyMutable<A> {
-    fn store_handle(&self) -> &StoreHandle {
-        &self.store_handle
-    }
-}
+// impl<A> HasStoreHandle for ReadOnlyMutable<A> {
+//     fn store_handle(&self) -> &StoreHandle {
+//         &self.store_handle
+//     }
+// }
 
-impl<A> Observe<A> for ReadOnlyMutable<A>
-    where
-        <Self as HasSignal<A>>::Return: Signal + Send + Sync + 'static,
-        A: Clone + Send + Sync + 'static
-{}
+// impl<A> Observe<A> for ReadOnlyMutable<A>
+//     where
+//         <Self as HasSignal<A>>::Return: Signal + Send + Sync + 'static,
+//         A: Clone + Send + Sync + 'static
+// {}
 
 impl<A> Provider for ReadOnlyMutable<A> {
     type YieldedValue = A;
@@ -241,7 +241,10 @@ impl<A: Clone> HasSignal<A> for ReadOnlyMutable<A> {
 
     #[inline]
     fn signal(&self) -> Self::Return {
-        MutableSignal(self.signal_state())
+        MutableSignal { 
+            state: self.signal_state(),
+            store_handle: self.store_handle.clone()
+        }
     }
 }
 
@@ -275,6 +278,12 @@ impl<A> fmt::Debug for ReadOnlyMutable<A> where A: fmt::Debug {
 
 #[repr(transparent)]
 pub struct Mutable<A>(ReadOnlyMutable<A>);
+
+impl<A> HasStoreHandle for Mutable<A> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.0.store_handle
+    }
+}
 
 impl<A> Mutable<A> {
     // TODO should this inline ?
@@ -459,9 +468,12 @@ impl<A> Drop for Mutable<A> {
 
 // TODO remove it from signals when it's dropped
 #[derive(Debug)]
-#[repr(transparent)]
+//#[repr(transparent)]
+#[has_store_handle_macro::has_store_handle]
 #[must_use = "Signals do nothing unless polled"]
-pub struct MutableSignal<A>(MutableSignalState<A>);
+pub struct MutableSignal<A>{
+    state: MutableSignalState<A>
+}
 
 impl<A> Unpin for MutableSignal<A> {}
 
@@ -469,7 +481,7 @@ impl<A: Clone> Signal for MutableSignal<A> {
     type Item = A;
 
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        self.0.poll_change(cx, |value| value.clone())
+        self.state.poll_change(cx, |value| value.clone())
     }
 }
 

@@ -44,11 +44,11 @@ impl<T: Clone> Observable<T> {
     }
 }
 
-impl<A> Observe<A> for Observable<A>
-    where
-        <Self as HasSignal<A>>::Return: Signal + Send + Sync + 'static,
-        A: Clone + Send + Sync + 'static
-{}
+// impl<A> Observe<A> for Observable<A>
+//     where
+//         <Self as HasSignal<A>>::Return: Signal + Send + Sync + 'static,
+//         A: Clone + Send + Sync + 'static
+// {}
 
 // impl<A> ObserveCloned<A> for Observable<A>
 //     where
@@ -76,49 +76,55 @@ impl<A: Clone> HasSignal<A> for Observable<A> {
     }
 }
 
-pub trait Observe<A>: HasSignal<A> + Provider
-    where
-        <Self as HasSignal<A>>::Return: Signal + Send + Sync + 'static,
-        A: Clone + Send + Sync + 'static
-{
-    fn observe<U, F>(&self, f: F) 
-        -> Observable<U>
-        where
-            U: Default + Send + Sync + 'static,
-            F: Fn(<<Self as HasSignal<A>>::Return as Signal>::Item) -> U + Send + Sync + 'static
-    {
-        let mut store_handle = self.store_handle().clone();
-        let out = store_handle.new_mutable(U::default());
-        let out_mutable_clone = out.clone();
-        let fut = self.signal().for_each(move |v| {
-            out_mutable_clone.set(f(v));
-            async {}
-        });
-        
-        let fut_key = store_handle.spawn_fut(None, fut);
-        Observable {
-            store_handle,
-            mutable: out,
-            fut_key
-        }
-    }
-}
+// pub trait Observe<A>: HasSignal<A> + Provider
+//     where
+//         <Self as HasSignal<A>>::Return: Signal + Send + Sync + 'static + Iterator,
+//         A: Clone + Send + Sync + 'static
+// {
+//     fn observe<U, F>(&self, f: F) 
+//         -> Observable<U>
+//         where
+//             U: Default + Send + Sync + 'static,
+//             F: Fn(<<Self as HasSignal<A>>::Return as Signal>::Item) -> U + Send + Sync + 'static
+//     {
+//         let mut store_handle = self.store_handle().clone();
+//         let out = store_handle.new_mutable(U::default());
+//         let out_mutable_clone = out.clone();
+//         let fut = self.signal().for_each(move |v| {
+//             out_mutable_clone.set(f(v));
+//             async {}
+//         });
+//         
+//         let fut_key = store_handle.spawn_fut(None, fut);
+//         Observable {
+//             store_handle,
+//             mutable: out,
+//             fut_key
+//         }
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
+    use std::ops::Deref;
     use std::sync::{Arc, Mutex};
     use std::thread::sleep;
     use std::time::Duration;
+    use crate::signal::ObserveSignal;
+    use crate::signal::SignalExt;
 
-    use crate::observable::Observe;
+    //use crate::observable::Observe;
     use crate::store::{Manager, RxStore};
-    use crate::traits::Provider;
+    use crate::traits::{HasSignal, Provider};
 
     #[test]
     fn it_has_future_key() {
         let store = RxStore::new();
         let mutable = store.new_mutable(1);
-        let observable = mutable.observe(|v| v);
+        let observable = mutable
+            .signal()
+            .map(|v| v)
+            .observe();
         assert!(observable.fut_key().is_some())
     }
     
@@ -126,7 +132,10 @@ mod tests {
     fn it_registers_effect() {
         let store = RxStore::new();
         let mutable = store.new_mutable(1);
-        let observable = mutable.observe(|v| v);
+        let observable = mutable
+            .signal()
+            .map(|v| v)
+            .observe();
         let holder = Arc::new(Mutex::new(0));
         let holder_clone = holder.clone();
         observable.register_effect(move |v| {

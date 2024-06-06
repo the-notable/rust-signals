@@ -1,6 +1,8 @@
 use std::task::Poll;
-use rx_store::signal_vec::{MutableVec, SignalVecExt, VecDiff, from_stream};
+
+use rx_store::signal_vec::{from_stream, SignalVecExt, VecDiff};
 use rx_store::store::{Manager, RxStore};
+use rx_store::traits::HasStoreHandle;
 
 mod util;
 
@@ -21,10 +23,17 @@ fn sync() {
 
 #[test]
 fn chain_replace() {
+    let store = RxStore::new();
     {
-        let left = util::Source::new(vec![] as Vec<Poll<VecDiff<u32>>>);
+        let left = util::Source::new(
+            vec![] as Vec<Poll<VecDiff<u32>>>, 
+            store.store_handle().clone()
+        );
 
-        let right = util::Source::new(vec![] as Vec<Poll<VecDiff<u32>>>);
+        let right = util::Source::new(
+            vec![] as Vec<Poll<VecDiff<u32>>>, 
+            store.store_handle().clone()
+        );
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(None),
@@ -35,12 +44,12 @@ fn chain_replace() {
         let left = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2] }),
             Poll::Ready(VecDiff::Replace { values: vec![6, 7] }),
-        ]);
+        ], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![3, 4, 5] }),
             Poll::Ready(VecDiff::Push { value: 11 }),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(Some(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] })),
@@ -58,12 +67,12 @@ fn chain_replace() {
         let left = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2] }),
             Poll::Ready(VecDiff::Replace { values: vec![] }),
-        ]);
+        ], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![3, 4, 5] }),
             Poll::Ready(VecDiff::Replace { values: vec![6, 7, 8] }),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(Some(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] })),
@@ -76,12 +85,12 @@ fn chain_replace() {
         let left = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2] }),
             Poll::Ready(VecDiff::Replace { values: vec![3, 4, 5] }),
-        ]);
+        ], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Pending,
             Poll::Ready(VecDiff::Push { value: 11 }),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(Some(VecDiff::Replace { values: vec![0, 1, 2] })),
@@ -95,12 +104,12 @@ fn chain_replace() {
         let left = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2] }),
             Poll::Ready(VecDiff::Push { value: 10 }),
-        ]);
+        ], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![3, 4, 5] }),
             Poll::Ready(VecDiff::Replace { values: vec![6, 7] }),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(Some(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] })),
@@ -118,12 +127,12 @@ fn chain_replace() {
         let left = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2] }),
             Poll::Ready(VecDiff::Push { value: 10 }),
-        ]);
+        ], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![3, 4, 5] }),
             Poll::Ready(VecDiff::Push { value: 11 }),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(Some(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] })),
@@ -137,11 +146,11 @@ fn chain_replace() {
         let left = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2] }),
             Poll::Ready(VecDiff::Push { value: 10 }),
-        ]);
+        ], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Ready(VecDiff::Push { value: 11 }),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(Some(VecDiff::Replace { values: vec![0, 1, 2] })),
@@ -152,11 +161,11 @@ fn chain_replace() {
     }
 
     {
-        let left = util::Source::new(vec![]);
+        let left = util::Source::new(vec![], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![3, 4, 5] }),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(Some(VecDiff::Replace { values: vec![3, 4, 5] })),
@@ -167,12 +176,12 @@ fn chain_replace() {
     {
         let left = util::Source::new(vec![
             Poll::Ready(VecDiff::Push { value: 10 }),
-        ]);
+        ], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![3, 4, 5] }),
             Poll::Ready(VecDiff::Push { value: 11 }),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(Some(VecDiff::Push { value: 10 })),
@@ -189,13 +198,13 @@ fn chain_replace() {
             Poll::Pending,
             Poll::Pending,
             Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2] }),
-        ]);
+        ], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Pending,
             Poll::Pending,
             Poll::Ready(VecDiff::Replace { values: vec![3, 4, 5] }),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Pending,
@@ -208,16 +217,17 @@ fn chain_replace() {
 
 #[test]
 fn chain_push() {
+    let store = RxStore::new();
     {
         let left = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2] }),
             Poll::Ready(VecDiff::Push { value: 10 }),
-        ]);
+        ], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![3, 4, 5] }),
             Poll::Ready(VecDiff::Push { value: 11 }),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(Some(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] })),
@@ -231,12 +241,12 @@ fn chain_push() {
         let left = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2] }),
             Poll::Ready(VecDiff::Push { value: 10 }),
-        ]);
+        ], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![3, 4, 5] }),
             Poll::Ready(VecDiff::Push { value: 11 }),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(Some(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] })),
@@ -249,16 +259,17 @@ fn chain_push() {
 
 #[test]
 fn chain_clear() {
+    let store = RxStore::new();
     {
         let left = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2] }),
             Poll::Ready(VecDiff::Clear {}),
-        ]);
+        ], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![3, 4, 5] }),
             Poll::Ready(VecDiff::Clear {}),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(Some(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] })),
@@ -271,12 +282,12 @@ fn chain_clear() {
         let left = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2] }),
             Poll::Ready(VecDiff::Clear {}),
-        ]);
+        ], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Pending,
             Poll::Ready(VecDiff::Push { value: 11 }),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(Some(VecDiff::Replace { values: vec![0, 1, 2] })),
@@ -290,12 +301,12 @@ fn chain_clear() {
         let left = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2] }),
             Poll::Ready(VecDiff::Clear {}),
-        ]);
+        ], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![3, 4, 5] }),
             Poll::Ready(VecDiff::Push { value: 11 }),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(Some(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] })),
@@ -311,12 +322,12 @@ fn chain_clear() {
         let left = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2] }),
             Poll::Ready(VecDiff::Push { value: 10 }),
-        ]);
+        ], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![3, 4, 5] }),
             Poll::Ready(VecDiff::Clear {}),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(Some(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] })),
@@ -332,12 +343,12 @@ fn chain_clear() {
         let left = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2] }),
             Poll::Ready(VecDiff::Clear {}),
-        ]);
+        ], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![3, 4, 5] }),
             Poll::Ready(VecDiff::Push { value: 11 }),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(Some(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] })),
@@ -353,12 +364,12 @@ fn chain_clear() {
         let left = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2] }),
             Poll::Ready(VecDiff::Push { value: 10 }),
-        ]);
+        ], store.store_handle().clone());
 
         let right = util::Source::new(vec![
             Poll::Ready(VecDiff::Replace { values: vec![3, 4, 5] }),
             Poll::Ready(VecDiff::Clear {}),
-        ]);
+        ], store.store_handle().clone());
 
         util::assert_signal_vec_eq(left.chain(right), vec![
             Poll::Ready(Some(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] })),
@@ -380,7 +391,7 @@ fn filter() {
         indexes: Vec<bool>,
         change: VecDiff<u32>,
     }*/
-
+    let store = RxStore::new();
     let input = util::Source::new(vec![
         Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] }),
         Poll::Pending,
@@ -412,7 +423,7 @@ fn filter() {
         Poll::Ready(VecDiff::RemoveAt { index: 0 }),
         Poll::Pending,
         Poll::Ready(VecDiff::RemoveAt { index: 0 }),
-    ]);
+    ], store.store_handle().clone());
 
     let output = input.filter(|&x| x == 3 || x == 4 || x > 5);
 

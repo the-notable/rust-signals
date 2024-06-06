@@ -6,12 +6,12 @@ use futures_core::stream::Stream;
 use futures_util::stream;
 use futures_util::stream::StreamExt;
 use pin_project::pin_project;
-use crate::observable::{Observable, Observe};
+use crate::observable::{Observable};
 
 use crate::signal::Broadcaster;
 use crate::signal_vec::{VecDiff, SignalVec};
 use crate::store::{Manager, StoreAccess, StoreHandle};
-use crate::traits::{HasSignal, HasStoreHandle, SSS};
+use crate::traits::{HasStoreHandle, SSS};
 
 
 
@@ -157,9 +157,11 @@ pub trait SignalExt: Signal {
     /// This is ***extremely*** efficient: it is *guaranteed* constant time, and it does not do
     /// any heap allocation.
     #[inline]
-    fn map<A, B>(self, store_handle: StoreHandle, callback: B) -> Map<Self, B>
+    fn map<A, B>(self, callback: B) -> Map<Self, B>
         where B: FnMut(Self::Item) -> A,
-              Self: Sized {
+              Self: Sized + HasStoreHandle
+    {
+        let store_handle = self.store_handle().clone();
         Map {
             signal: self,
             callback,
@@ -400,11 +402,14 @@ pub trait SignalExt: Signal {
     fn throttle<A, B>(self, callback: B) -> Throttle<Self, A, B>
         where A: Future<Output = ()>,
               B: FnMut() -> A,
-              Self: Sized {
+              Self: Sized + HasStoreHandle
+    {
+        let store_handle = self.store_handle().clone();
         Throttle {
             signal: Some(self),
             future: None,
             callback,
+            store_handle
         }
     }
 
@@ -1085,8 +1090,8 @@ pub struct Map<A, B> {
     store_handle: StoreHandle
 }
 
-// impl<A, B, C> Map<A, B> 
-//     where 
+// impl<A, B, C> Map<A, B>
+//     where
 //         A: Signal + SSS,
 //         B: FnMut(A::Item) -> C + SSS,
 //         C: Default + SSS
@@ -1099,7 +1104,7 @@ pub struct Map<A, B> {
 //             out_mutable_clone.set(v);
 //             async {}
 //         });
-// 
+//
 //         let fut_key = store.spawn_fut(None, fut);
 //         Observable {
 //             store_handle: store,
@@ -1120,12 +1125,12 @@ impl<A, B> HasStoreHandle for Map<A, B> {
 //         Self: Signal + HasStoreHandle + Sized + SSS,
 //         <Self as Signal>::Item: Default + SSS
 // {
-//     
+//
 // }
 
-pub trait ObserveSignal 
-    where 
-        Self: Signal + HasStoreHandle + Sized + SSS, 
+pub trait ObserveSignal
+    where
+        Self: Signal + HasStoreHandle + Sized + SSS,
         <Self as Signal>::Item: Default + SSS
 {
     fn observe(self) -> Observable<<Self as Signal>::Item> {
@@ -1146,8 +1151,8 @@ pub trait ObserveSignal
     }
 }
 
-impl<T> ObserveSignal for T 
-    where 
+impl<T> ObserveSignal for T
+    where
         T: Signal + HasStoreHandle + Sized + SSS,
         <T as Signal>::Item: Default + SSS {}
 
@@ -1387,11 +1392,18 @@ impl<A, B, C> Signal for MapFuture<A, B, C>
 #[derive(Debug)]
 #[must_use = "Signals do nothing unless polled"]
 pub struct Throttle<A, B, C> where A: Signal {
-    #[pin]
+    #[pin] 
     signal: Option<A>,
-    #[pin]
+    #[pin] 
     future: Option<B>,
     callback: C,
+    store_handle: StoreHandle
+}
+
+impl<A, B, C> HasStoreHandle for Throttle<A, B, C> where A: Signal {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
 }
 
 impl<A, B, C> Signal for Throttle<A, B, C>
@@ -1401,7 +1413,13 @@ impl<A, B, C> Signal for Throttle<A, B, C>
     type Item = A::Item;
 
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let ThrottleProj { mut signal, mut future, callback } = self.project();
+        
+        let ThrottleProj { 
+            mut signal, 
+            mut future, 
+            callback ,
+            store_handle
+        } = self.project();
 
         match future.as_mut().as_pin_mut().map(|future| future.poll(cx)) {
             None => {},
