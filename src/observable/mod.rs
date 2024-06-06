@@ -1,6 +1,6 @@
-use crate::signal::{Mutable, MutableSignal, Signal};
+use crate::signal::{Mutable, MutableSignal};
 use crate::signal::SignalExt;
-use crate::store::{Manager, SpawnedFutureKey, StoreAccess, StoreHandle};
+use crate::store::{SpawnedFutureKey, StoreAccess, StoreHandle};
 use crate::traits::{HasSignal, HasSpawnedFutureKey, HasStoreHandle, Provider, SSS};
 
 #[derive(Debug, Clone)]
@@ -106,14 +106,12 @@ impl<A: Clone> HasSignal<A> for Observable<A> {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Deref;
     use std::sync::{Arc, Mutex};
     use std::thread::sleep;
     use std::time::Duration;
+
     use crate::signal::ObserveSignal;
     use crate::signal::SignalExt;
-
-    //use crate::observable::Observe;
     use crate::store::{Manager, RxStore};
     use crate::traits::{HasSignal, Provider};
 

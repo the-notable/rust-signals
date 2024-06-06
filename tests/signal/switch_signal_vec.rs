@@ -1,11 +1,14 @@
 use std::task::Poll;
 use rx_store::signal::SignalExt;
 use rx_store::signal_vec::VecDiff;
+use rx_store::store::RxStore;
+use rx_store::traits::HasStoreHandle;
 use crate::util;
 
 
 #[test]
 fn test_switch_signal_vec() {
+    let store = RxStore::new();
     let input = util::Source::new(vec![
         Poll::Ready(true),
         Poll::Pending,
@@ -21,13 +24,13 @@ fn test_switch_signal_vec() {
         Poll::Ready(false),
         Poll::Ready(true),
         Poll::Pending,
-    ]);
+    ], store.store_handle().clone());
 
     let output = input.switch_signal_vec(move |test| {
         if test {
             util::Source::new(vec![
                 Poll::Ready(VecDiff::Push { value: 10 }),
-            ])
+            ], store.store_handle().clone())
 
         } else {
             util::Source::new(vec![
@@ -36,7 +39,7 @@ fn test_switch_signal_vec() {
                 Poll::Pending,
                 Poll::Pending,
                 Poll::Ready(VecDiff::InsertAt { index: 0, value: 7 }),
-            ])
+            ], store.store_handle().clone())
         }
     });
 
@@ -57,13 +60,14 @@ fn test_switch_signal_vec() {
 
 #[test]
 fn test_switch_signal_vec_bug() {
+    let store = RxStore::new();
     let input = util::Source::new(vec![
         Poll::Ready(util::Source::new(vec![
             Poll::Ready(vec![]),
             Poll::Pending,
             Poll::Ready(vec!["hello", "world"]),
-        ])),
-    ]);
+        ], store.store_handle().clone())),
+    ], store.store_handle().clone());
 
     let output = input.switch_signal_vec(|messages| messages.to_signal_vec());
 

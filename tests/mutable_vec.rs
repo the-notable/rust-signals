@@ -315,44 +315,44 @@ fn test_drain_panic_included_end() {
 
 #[test]
 fn test_truncate() {
-    is_eq(vec![], vec![], |v| drop(v.truncate(0)), vec![
+    is_eq(vec![], vec![], |v| v.truncate(0), vec![
         Poll::Pending,
         Poll::Ready(None),
     ]);
 
-    is_eq(vec![], vec![], |v| drop(v.truncate(10)), vec![
+    is_eq(vec![], vec![], |v| v.truncate(10), vec![
         Poll::Pending,
         Poll::Ready(None),
     ]);
 
-    is_eq(vec![5, 10, 15], vec![5, 10, 15], |v| drop(v.truncate(3)), vec![
+    is_eq(vec![5, 10, 15], vec![5, 10, 15], |v| v.truncate(3), vec![
         Poll::Ready(Some(VecDiff::Replace { values: vec![5, 10, 15] } )),
         Poll::Pending,
         Poll::Ready(None),
     ]);
 
-    is_eq(vec![5, 10, 15], vec![5, 10, 15], |v| drop(v.truncate(10)), vec![
+    is_eq(vec![5, 10, 15], vec![5, 10, 15], |v| v.truncate(10), vec![
         Poll::Ready(Some(VecDiff::Replace { values: vec![5, 10, 15] } )),
         Poll::Pending,
         Poll::Ready(None),
     ]);
 
-    is_eq(vec![5, 10, 15], vec![5, 10], |v| drop(v.truncate(2)), vec![
+    is_eq(vec![5, 10, 15], vec![5, 10], |v| v.truncate(2), vec![
         Poll::Ready(Some(VecDiff::Replace { values: vec![5, 10, 15] } )),
         Poll::Pending,
+        Poll::Ready(Some(VecDiff::Pop {})),
+        Poll::Ready(None),
+    ]);
+
+    is_eq(vec![5, 10, 15], vec![5], |v| v.truncate(1), vec![
+        Poll::Ready(Some(VecDiff::Replace { values: vec![5, 10, 15] } )),
+        Poll::Pending,
+        Poll::Ready(Some(VecDiff::Pop {})),
         Poll::Ready(Some(VecDiff::Pop {})),
         Poll::Ready(None),
     ]);
 
-    is_eq(vec![5, 10, 15], vec![5], |v| drop(v.truncate(1)), vec![
-        Poll::Ready(Some(VecDiff::Replace { values: vec![5, 10, 15] } )),
-        Poll::Pending,
-        Poll::Ready(Some(VecDiff::Pop {})),
-        Poll::Ready(Some(VecDiff::Pop {})),
-        Poll::Ready(None),
-    ]);
-
-    is_eq(vec![5, 10, 15], vec![], |v| drop(v.truncate(0)), vec![
+    is_eq(vec![5, 10, 15], vec![], |v| v.truncate(0), vec![
         Poll::Ready(Some(VecDiff::Replace { values: vec![5, 10, 15] } )),
         Poll::Pending,
         Poll::Ready(Some(VecDiff::Clear {})),
@@ -363,12 +363,12 @@ fn test_truncate() {
 
 #[test]
 fn test_extend() {
-    is_eq(vec![], vec![], |v| drop(v.extend(0..0)), vec![
+    is_eq(vec![], vec![], |v| v.extend(0..0), vec![
         Poll::Pending,
         Poll::Ready(None),
     ]);
 
-    is_eq(vec![], vec![0, 1, 2], |v| drop(v.extend(0..3)), vec![
+    is_eq(vec![], vec![0, 1, 2], |v| v.extend(0..3), vec![
         Poll::Pending,
         Poll::Ready(Some(VecDiff::Push { value: 0 })),
         Poll::Ready(Some(VecDiff::Push { value: 1 })),
@@ -376,7 +376,7 @@ fn test_extend() {
         Poll::Ready(None),
     ]);
 
-    is_eq(vec![0, 1, 2], vec![0, 1, 2, 3, 4, 5], |v| drop(v.extend(3..6)), vec![
+    is_eq(vec![0, 1, 2], vec![0, 1, 2, 3, 4, 5], |v| v.extend(3..6), vec![
         Poll::Ready(Some(VecDiff::Replace { values: vec![0, 1, 2] } )),
         Poll::Pending,
         Poll::Ready(Some(VecDiff::Push { value: 3 })),
@@ -385,7 +385,7 @@ fn test_extend() {
         Poll::Ready(None),
     ]);
 
-    is_eq(vec![0, 1, 2], vec![0, 1, 2], |v| drop(v.extend(0..0)), vec![
+    is_eq(vec![0, 1, 2], vec![0, 1, 2], |v| v.extend(0..0), vec![
         Poll::Ready(Some(VecDiff::Replace { values: vec![0, 1, 2] } )),
         Poll::Pending,
         Poll::Ready(None),

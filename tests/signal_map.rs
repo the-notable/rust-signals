@@ -1,12 +1,14 @@
-use std::collections::BTreeMap;
 use std::task::Poll;
-use rx_store::signal::{self, SignalExt};
+
 use rx_store::signal_map::{self, MapDiff, SignalMapExt};
+use rx_store::store::RxStore;
+use rx_store::traits::HasStoreHandle;
 
 mod util;
 
 #[test]
 fn map_value() {
+    let store = RxStore::new();
     let input = util::Source::new(vec![
         Poll::Ready(MapDiff::Replace {
             entries: vec![(1, 1), (2, 1), (3, 2), (4, 3)]
@@ -27,7 +29,7 @@ fn map_value() {
             value: 1,
         }),
         Poll::Ready(MapDiff::Clear {})
-    ]);
+    ], store.store_handle().clone());
 
     let output = input.map_value(|value| value * 2);
 
@@ -164,6 +166,7 @@ fn always_iter() {
 
 #[test]
 fn key_cloned_exists_at_start() {
+    let store = RxStore::new();
     let input = util::Source::new(vec![
         Poll::Ready(MapDiff::Replace {
             entries: vec![(1, 1), (2, 1), (3, 2), (4, 3)]
@@ -180,7 +183,7 @@ fn key_cloned_exists_at_start() {
         Poll::Pending,
         Poll::Pending,
         Poll::Ready(MapDiff::Remove {key: 1})
-    ]);
+    ], store.store_handle().clone());
 
     let output = input.key_cloned(1);
 
@@ -195,6 +198,7 @@ fn key_cloned_exists_at_start() {
 
 #[test]
 fn key_cloned_does_not_exist_at_start() {
+    let store = RxStore::new();
     let input = util::Source::new(vec![
         Poll::Ready(MapDiff::Replace {
             entries: vec![(1, 1), (2, 1), (3, 2), (4, 3)]
@@ -211,7 +215,7 @@ fn key_cloned_does_not_exist_at_start() {
         Poll::Pending,
         Poll::Pending,
         Poll::Ready(MapDiff::Clear {})
-    ]);
+    ], store.store_handle().clone());
 
     let output = input.key_cloned(5);
 
@@ -226,7 +230,8 @@ fn key_cloned_does_not_exist_at_start() {
 
 #[test]
 fn key_cloned_empty() {
-    let input = util::Source::<MapDiff<u32, u32>>::new(vec![]);
+    let store = RxStore::new();
+    let input = util::Source::<MapDiff<u32, u32>>::new(vec![], store.store_handle().clone());
 
     let output = input.key_cloned(5);
 

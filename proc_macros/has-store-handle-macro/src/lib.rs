@@ -21,11 +21,11 @@ pub fn has_store_handle(_args: TokenStream, input: TokenStream) -> TokenStream {
         .map(|v| v.to_token_stream())
         .collect::<Vec<_>>();
 
-    println!("{}", name);
-    println!("{}", impl_generics.to_token_stream());
-    println!("{}", ty_generics.to_token_stream());
-    println!("{}", where_clause.to_token_stream());
-    fields.iter().for_each(|v| println!("{}", v));
+    // println!("{}", name);
+    // println!("{}", impl_generics.to_token_stream());
+    // println!("{}", ty_generics.to_token_stream());
+    // println!("{}", where_clause.to_token_stream());
+    // fields.iter().for_each(|v| println!("{}", v));
 
     // Build the output, possibly using quasi-quotation
     let expanded = quote! {

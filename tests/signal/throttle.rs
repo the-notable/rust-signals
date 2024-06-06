@@ -5,12 +5,13 @@ use rx_store::signal::{Signal, SignalExt, Mutable};
 use futures_util::future::poll_fn;
 use pin_utils::pin_mut;
 use rx_store::store::{Manager, RxStore};
-use rx_store::traits::HasSignal;
+use rx_store::traits::{HasSignal, HasStoreHandle};
 use crate::util;
 
 
 #[test]
 fn test_throttle() {
+    let store = RxStore::new();
     let input = util::Source::new(vec![
         Poll::Ready(true),
         Poll::Pending,
@@ -26,7 +27,7 @@ fn test_throttle() {
         Poll::Ready(false),
         Poll::Ready(true),
         Poll::Pending,
-    ]);
+    ], store.store_handle().clone());
 
     let output = input.throttle(move || {
         let mut done = false;
@@ -75,7 +76,7 @@ fn test_throttle_timing() {
         Poll::Ready(3),
         Poll::Ready(4),
         Poll::Ready(5),
-    ]);
+    ], store.store_handle().clone());
 
     struct Called {
         ready: Mutable<bool>,

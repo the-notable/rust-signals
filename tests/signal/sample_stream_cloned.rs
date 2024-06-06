@@ -1,10 +1,14 @@
 use std::task::Poll;
 use rx_store::signal::SignalExt;
+use rx_store::store::RxStore;
+use rx_store::traits::HasStoreHandle;
 use crate::util;
 
 
 #[test]
 fn test_eq() {
+    let store = RxStore::new();
+    
     let signal = util::Source::new(vec![
         Poll::Ready(true),
         Poll::Pending,
@@ -31,7 +35,7 @@ fn test_eq() {
         Poll::Pending,
         Poll::Ready(false),
         Poll::Pending,
-    ]);
+    ], store.store_handle().clone());
 
     let stream = util::Source::<u32>::new(vec![
         Poll::Pending,
@@ -67,7 +71,7 @@ fn test_eq() {
         Poll::Pending,
         Poll::Ready(3),
         Poll::Pending,
-    ]);
+    ], store.store_handle().clone());
 
     let output = signal.sample_stream_cloned(stream);
 

@@ -483,6 +483,7 @@ fn filter() {
 
 #[test]
 fn filter_map() {
+    let store = RxStore::new();
     let input = util::Source::new(vec![
         Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] }),
         Poll::Pending,
@@ -514,7 +515,7 @@ fn filter_map() {
         Poll::Ready(VecDiff::RemoveAt { index: 0 }),
         Poll::Pending,
         Poll::Ready(VecDiff::RemoveAt { index: 0 }),
-    ]);
+    ], store.store_handle().clone());
 
     let output = input.filter_map(|x| {
         if x == 3 || x == 4 || x > 5 {
@@ -559,6 +560,7 @@ fn filter_map() {
 
 #[test]
 fn sum() {
+    let store = RxStore::new();
     let input = util::Source::new(vec![
         Poll::Pending,
         Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] }),
@@ -575,7 +577,7 @@ fn sum() {
         Poll::Ready(VecDiff::RemoveAt { index: 1 }),
         Poll::Pending,
         Poll::Ready(VecDiff::Clear {}),
-    ]);
+    ], store.store_handle().clone());
 
     let output = input.sum();
 
@@ -595,6 +597,7 @@ fn sum() {
 
 #[test]
 fn len() {
+    let store = RxStore::new();
     let input = util::Source::new(vec![
         Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] }),
         Poll::Pending,
@@ -611,7 +614,7 @@ fn len() {
         Poll::Pending,
         Poll::Ready(VecDiff::Clear {}),
         Poll::Ready(VecDiff::Replace { values: vec![] }),
-    ]);
+    ], store.store_handle().clone());
 
     let output = input.len();
 
@@ -630,6 +633,7 @@ fn len() {
 
 #[test]
 fn is_empty() {
+    let store = RxStore::new();
     let input = util::Source::new(vec![
         Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] }),
         Poll::Pending,
@@ -646,7 +650,7 @@ fn is_empty() {
         Poll::Pending,
         Poll::Ready(VecDiff::Clear {}),
         Poll::Ready(VecDiff::Replace { values: vec![] }),
-    ]);
+    ], store.store_handle().clone());
 
     let output = input.is_empty();
 
@@ -665,6 +669,7 @@ fn is_empty() {
 
 #[test]
 fn to_signal_map() {
+    let store = RxStore::new();
     let input = util::Source::new(vec![
         Poll::Pending,
         Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] }),
@@ -681,7 +686,7 @@ fn to_signal_map() {
         Poll::Ready(VecDiff::RemoveAt { index: 1 }),
         Poll::Pending,
         Poll::Ready(VecDiff::Clear {}),
-    ]);
+    ], store.store_handle().clone());
 
     let output = input.to_signal_map(|x| x.into_iter().copied().collect::<Vec<u32>>());
 
@@ -702,6 +707,7 @@ fn to_signal_map() {
 
 #[test]
 fn to_signal_cloned() {
+    let store = RxStore::new();
     let input = util::Source::new(vec![
         Poll::Pending,
         Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] }),
@@ -718,7 +724,7 @@ fn to_signal_cloned() {
         Poll::Ready(VecDiff::RemoveAt { index: 1 }),
         Poll::Pending,
         Poll::Ready(VecDiff::Clear {}),
-    ]);
+    ], store.store_handle().clone());
 
     let output = input.to_signal_cloned();
 
@@ -737,7 +743,8 @@ fn to_signal_cloned() {
 
 #[test]
 fn debug_to_signal_cloned() {
-    let input: util::Source<VecDiff<u32>> = util::Source::new(vec![]);
+    let store = RxStore::new();
+    let input: util::Source<VecDiff<u32>> = util::Source::new(vec![], store.store_handle().clone());
     assert_eq!(format!("{:?}", input.to_signal_cloned()), "ToSignalCloned { ... }");
 }
 
@@ -763,6 +770,7 @@ fn test_from_stream() {
 
 #[test]
 fn flatten() {
+    let store = RxStore::new();
     let input = util::Source::new(vec![
         Poll::Ready(VecDiff::Replace {
             values: vec![
@@ -770,15 +778,15 @@ fn flatten() {
                     Poll::Ready(VecDiff::Replace { values: vec![0, 1, 2, 3, 4, 5] }),
                     Poll::Pending,
                     Poll::Ready(VecDiff::Replace { values: vec![2, 3, 4] }),
-                ]),
+                ], store.store_handle().clone()),
                 util::Source::new(vec![
                     Poll::Ready(VecDiff::Replace { values: vec![6, 7, 8, 9] }),
                     Poll::Pending,
                     Poll::Ready(VecDiff::Clear {}),
-                ]),
+                ], store.store_handle().clone()),
             ],
         }),
-    ]);
+    ], store.store_handle().clone());
 
     let output = input.flatten();
 
@@ -806,17 +814,18 @@ fn flatten() {
 
 #[test]
 fn flatten_empty() {
+    let store = RxStore::new();
     let input = util::Source::new(vec![
         Poll::Pending,
         Poll::Ready(VecDiff::Push {
-            value: util::Source::new(vec![]),
+            value: util::Source::new(vec![], store.store_handle().clone()),
         }),
         Poll::Ready(VecDiff::Push {
             value: util::Source::new(vec![
                 Poll::Ready(VecDiff::Replace { values: vec![42] }),
-            ]),
+            ], store.store_handle().clone()),
         }),
-    ]);
+    ], store.store_handle().clone());
 
     let output = input.flatten();
 

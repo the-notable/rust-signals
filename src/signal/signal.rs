@@ -55,9 +55,9 @@ impl<A> Signal for Box<A> where A: ?Sized + Signal + Unpin {
 
 // Copied from Future in the Rust stdlib
 impl<A> Signal for Pin<A>
-    where A: Unpin + ::std::ops::DerefMut,
+    where A: Unpin + std::ops::DerefMut,
           A::Target: Signal {
-    type Item = <<A as ::std::ops::Deref>::Target as Signal>::Item;
+    type Item = <<A as std::ops::Deref>::Target as Signal>::Item;
 
     #[inline]
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
@@ -171,33 +171,45 @@ pub trait SignalExt: Signal {
 
     #[inline]
     fn inspect<A>(self, callback: A) -> Inspect<Self, A>
-        where A: FnMut(&Self::Item),
-              Self: Sized {
+        where 
+            A: FnMut(&Self::Item),
+              Self: Sized + HasStoreHandle
+    {
+        let store_handle = self.store_handle().clone();
         Inspect {
             signal: self,
             callback,
+            store_handle
         }
     }
 
     #[inline]
     fn eq(self, value: Self::Item) -> Eq<Self>
-        where Self::Item: PartialEq,
-              Self: Sized {
+        where 
+            Self::Item: PartialEq,
+            Self: Sized + HasStoreHandle
+    {
+        let store_handle = self.store_handle().clone();
         Eq {
             signal: self,
             matches: None,
             value,
+            store_handle
         }
     }
 
     #[inline]
     fn neq(self, value: Self::Item) -> Neq<Self>
-        where Self::Item: PartialEq,
-              Self: Sized {
+        where 
+            Self::Item: PartialEq,
+            Self: Sized + HasStoreHandle
+    {
+        let store_handle = self.store_handle().clone();
         Neq {
             signal: self,
             matches: None,
             value,
+            store_handle
         }
     }
 
@@ -230,31 +242,40 @@ pub trait SignalExt: Signal {
         // TODO should this use & instead of &mut ?
         where B: FnMut(&mut Self::Item) -> A,
               Self::Item: PartialEq,
-              Self: Sized {
+              Self: Sized + HasStoreHandle
+    {
+        let store_handle = self.store_handle().clone();
         DedupeMap {
             old_value: None,
             signal: self,
             callback,
+            store_handle
         }
     }
 
     #[inline]
     fn dedupe(self) -> Dedupe<Self>
         where Self::Item: PartialEq,
-              Self: Sized {
+              Self: Sized + HasStoreHandle
+    {
+        let store_handle = self.store_handle().clone();
         Dedupe {
             old_value: None,
             signal: self,
+            store_handle
         }
     }
 
     #[inline]
     fn dedupe_cloned(self) -> DedupeCloned<Self>
         where Self::Item: PartialEq,
-              Self: Sized {
+              Self: Sized + HasStoreHandle
+    {
+        let store_handle = self.store_handle().clone();
         DedupeCloned {
             old_value: None,
             signal: self,
+            store_handle
         }
     }
 
@@ -306,12 +327,15 @@ pub trait SignalExt: Signal {
     fn map_future<A, B>(self, callback: B) -> MapFuture<Self, A, B>
         where A: Future,
               B: FnMut(Self::Item) -> A,
-              Self: Sized {
+              Self: Sized + HasStoreHandle
+    {
+        let store_handle = self.store_handle().clone();
         MapFuture {
             signal: Some(self),
             future: None,
             callback,
             first: true,
+            store_handle
         }
     }
 
@@ -368,11 +392,14 @@ pub trait SignalExt: Signal {
     #[inline]
     fn filter_map<A, B>(self, callback: B) -> FilterMap<Self, B>
         where B: FnMut(Self::Item) -> Option<A>,
-              Self: Sized {
+              Self: Sized + HasStoreHandle 
+    {
+        let store_handle = self.store_handle().clone();
         FilterMap {
             signal: self,
             callback,
             first: true,
+            store_handle
         }
     }
 
@@ -438,10 +465,13 @@ pub trait SignalExt: Signal {
     #[inline]
     fn flatten(self) -> Flatten<Self>
         where Self::Item: Signal,
-              Self: Sized {
+              Self: Sized + HasStoreHandle
+    {
+        let store_handle = self.store_handle().clone();
         Flatten {
             signal: Some(self),
             inner: None,
+            store_handle
         }
     }
 
@@ -480,7 +510,7 @@ pub trait SignalExt: Signal {
               Self: Sized {
         SampleStreamCloned {
             signal: Some(self),
-            stream: stream,
+            stream,
             value: None,
         }
     }
@@ -513,7 +543,7 @@ pub trait SignalExt: Signal {
               Self: Sized {
         WaitFor {
             signal: self,
-            value: value,
+            value,
         }
     }
 
@@ -550,11 +580,14 @@ pub trait SignalExt: Signal {
     #[inline]
     fn stop_if<F>(self, test: F) -> StopIf<Self, F>
         where F: FnMut(&Self::Item) -> bool,
-              Self: Sized {
+              Self: Sized + HasStoreHandle
+    {
+        let store_handle = self.store_handle().clone();
         StopIf {
             signal: self,
             stopped: false,
             test,
+            store_handle
         }
     }
 
@@ -562,10 +595,16 @@ pub trait SignalExt: Signal {
     #[inline]
     #[track_caller]
     #[cfg(feature = "debug")]
-    fn debug(self) -> SignalDebug<Self> where Self: Sized, Self::Item: std::fmt::Debug {
+    fn debug(self) -> SignalDebug<Self> 
+        where 
+            Self: Sized + HasStoreHandle, 
+            Self::Item: std::fmt::Debug 
+    {
+        let store_handle = self.store_handle().clone();
         SignalDebug {
             signal: self,
             location: std::panic::Location::caller(),
+            store_handle
         }
     }
 
@@ -753,6 +792,13 @@ pub struct SignalDebug<A> {
     #[pin]
     signal: A,
     location: &'static std::panic::Location<'static>,
+    store_handle: StoreHandle
+}
+
+impl<A> HasStoreHandle for SignalDebug<A> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
 }
 
 #[cfg(feature = "debug")]
@@ -1090,43 +1136,11 @@ pub struct Map<A, B> {
     store_handle: StoreHandle
 }
 
-// impl<A, B, C> Map<A, B>
-//     where
-//         A: Signal + SSS,
-//         B: FnMut(A::Item) -> C + SSS,
-//         C: Default + SSS
-// {
-//     pub fn observe(self) -> Observable<C> {
-//         let mut store = self.store_handle.clone();
-//         let out = store.new_mutable(C::default());
-//         let out_mutable_clone = out.clone();
-//         let fut = self.for_each(move |v| {
-//             out_mutable_clone.set(v);
-//             async {}
-//         });
-//
-//         let fut_key = store.spawn_fut(None, fut);
-//         Observable {
-//             store_handle: store,
-//             mutable: out,
-//             fut_key
-//         }
-//     }
-// }
-
 impl<A, B> HasStoreHandle for Map<A, B> {
     fn store_handle(&self) -> &StoreHandle {
         &self.store_handle
     }
 }
-
-// impl<A, B> ObserveSignal for Map<A, B>
-//     where
-//         Self: Signal + HasStoreHandle + Sized + SSS,
-//         <Self as Signal>::Item: Default + SSS
-// {
-//
-// }
 
 pub trait ObserveSignal
     where
@@ -1163,9 +1177,13 @@ impl<A, B, C> Signal for Map<A, B>
 
     #[inline]
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let MapProj { signal, callback, store_handle } = self.project();
+        let MapProj { 
+            signal, 
+            callback, 
+            store_handle: _ 
+        } = self.project();
 
-        signal.poll_change(cx).map(|opt| opt.map(|value| callback(value)))
+        signal.poll_change(cx).map(|opt| opt.map(callback))
     }
 }
 
@@ -1178,6 +1196,13 @@ pub struct StopIf<A, B> {
     signal: A,
     stopped: bool,
     test: B,
+    store_handle: StoreHandle
+}
+
+impl<A, B> HasStoreHandle for StopIf<A, B> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
 }
 
 impl<A, B> Signal for StopIf<A, B>
@@ -1186,7 +1211,12 @@ impl<A, B> Signal for StopIf<A, B>
     type Item = A::Item;
 
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let StopIfProj { signal, stopped, test } = self.project();
+        let StopIfProj { 
+            signal, 
+            stopped, 
+            test, 
+            store_handle: _ 
+        } = self.project();
 
         if *stopped {
             Poll::Ready(None)
@@ -1219,6 +1249,13 @@ pub struct Eq<A> where A: Signal {
     signal: A,
     matches: Option<bool>,
     value: A::Item,
+    store_handle: StoreHandle
+}
+
+impl<A: Signal> HasStoreHandle for Eq<A> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
 }
 
 impl<A> Signal for Eq<A>
@@ -1228,7 +1265,12 @@ impl<A> Signal for Eq<A>
 
     #[inline]
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let EqProj { mut signal, matches, value } = self.project();
+        let EqProj { 
+            mut signal, 
+            matches, 
+            value, 
+            store_handle: _ 
+        } = self.project();
 
         loop {
             return match signal.as_mut().poll_change(cx) {
@@ -1259,6 +1301,13 @@ pub struct Neq<A> where A: Signal {
     signal: A,
     matches: Option<bool>,
     value: A::Item,
+    store_handle: StoreHandle
+}
+
+impl<A: Signal> HasStoreHandle for Neq<A> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
 }
 
 impl<A> Signal for Neq<A>
@@ -1268,7 +1317,12 @@ impl<A> Signal for Neq<A>
 
     #[inline]
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let NeqProj { mut signal, matches, value } = self.project();
+        let NeqProj { 
+            mut signal, 
+            matches, 
+            value,
+            store_handle: _
+        } = self.project();
 
         loop {
             return match signal.as_mut().poll_change(cx) {
@@ -1298,6 +1352,13 @@ pub struct Inspect<A, B> {
     #[pin]
     signal: A,
     callback: B,
+    store_handle: StoreHandle
+}
+
+impl<A, B> HasStoreHandle for Inspect<A, B> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
 }
 
 impl<A, B> Signal for Inspect<A, B>
@@ -1330,6 +1391,13 @@ pub struct MapFuture<A, B, C> {
     future: Option<B>,
     callback: C,
     first: bool,
+    store_handle: StoreHandle
+}
+
+impl<A, B, C> HasStoreHandle for MapFuture<A, B, C> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
 }
 
 impl<A, B, C> Signal for MapFuture<A, B, C>
@@ -1339,7 +1407,13 @@ impl<A, B, C> Signal for MapFuture<A, B, C>
     type Item = Option<B::Output>;
 
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let MapFutureProj { mut signal, mut future, callback, first } = self.project();
+        let MapFutureProj { 
+            mut signal, 
+            mut future, 
+            callback, 
+            first,
+            store_handle: _
+        } = self.project();
 
         let mut done = false;
 
@@ -1418,7 +1492,7 @@ impl<A, B, C> Signal for Throttle<A, B, C>
             mut signal, 
             mut future, 
             callback ,
-            store_handle
+            store_handle: _
         } = self.project();
 
         match future.as_mut().as_pin_mut().map(|future| future.poll(cx)) {
@@ -1549,6 +1623,13 @@ pub struct DedupeMap<A, B> where A: Signal {
     #[pin]
     signal: A,
     callback: B,
+    store_handle: StoreHandle
+}
+
+impl<A: Signal, B> HasStoreHandle for DedupeMap<A, B> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
 }
 
 impl<A, B, C> Signal for DedupeMap<A, B>
@@ -1562,7 +1643,12 @@ impl<A, B, C> Signal for DedupeMap<A, B>
 
     // TODO should this use #[inline] ?
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let DedupeMapProj { old_value, signal, callback } = self.project();
+        let DedupeMapProj { 
+            old_value, 
+            signal, 
+            callback,
+            store_handle: _
+        } = self.project();
 
         dedupe(signal, cx, old_value, callback)
     }
@@ -1576,6 +1662,13 @@ pub struct Dedupe<A> where A: Signal {
     old_value: Option<A::Item>,
     #[pin]
     signal: A,
+    store_handle: StoreHandle
+}
+
+impl<A: Signal> HasStoreHandle for Dedupe<A> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
 }
 
 impl<A> Signal for Dedupe<A>
@@ -1586,7 +1679,11 @@ impl<A> Signal for Dedupe<A>
 
     // TODO should this use #[inline] ?
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let DedupeProj { old_value, signal } = self.project();
+        let DedupeProj { 
+            old_value, 
+            signal,
+            store_handle: _
+        } = self.project();
 
         dedupe(signal, cx, old_value, |value| *value)
     }
@@ -1600,6 +1697,17 @@ pub struct DedupeCloned<A> where A: Signal {
     old_value: Option<A::Item>,
     #[pin]
     signal: A,
+    store_handle: StoreHandle
+}
+
+impl<A> HasStoreHandle for DedupeCloned<A>
+    where
+        A: Signal,
+        A::Item: PartialEq + Clone
+{
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
 }
 
 impl<A> Signal for DedupeCloned<A>
@@ -1610,12 +1718,15 @@ impl<A> Signal for DedupeCloned<A>
 
     // TODO should this use #[inline] ?
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let DedupeClonedProj { old_value, signal } = self.project();
+        let DedupeClonedProj { 
+            old_value, 
+            signal,
+            store_handle: _
+        } = self.project();
 
         dedupe(signal, cx, old_value, |value| value.clone())
     }
 }
-
 
 #[pin_project(project = FilterMapProj)]
 #[derive(Debug)]
@@ -1625,6 +1736,13 @@ pub struct FilterMap<A, B> {
     signal: A,
     callback: B,
     first: bool,
+    store_handle: StoreHandle
+}
+
+impl<A, B> HasStoreHandle for FilterMap<A, B> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
 }
 
 impl<A, B, C> Signal for FilterMap<A, B>
@@ -1634,7 +1752,12 @@ impl<A, B, C> Signal for FilterMap<A, B>
 
     // TODO should this use #[inline] ?
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let FilterMapProj { mut signal, callback, first } = self.project();
+        let FilterMapProj { 
+            mut signal, 
+            callback, 
+            first,
+            store_handle: _
+        } = self.project();
 
         loop {
             return match signal.as_mut().poll_change(cx) {
@@ -1672,6 +1795,13 @@ pub struct Flatten<A> where A: Signal {
     signal: Option<A>,
     #[pin]
     inner: Option<A::Item>,
+    store_handle: StoreHandle
+}
+
+impl<A: Signal> HasStoreHandle for Flatten<A> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
 }
 
 // Poll parent => Has inner   => Poll inner  => Output
@@ -1694,7 +1824,11 @@ impl<A> Signal for Flatten<A>
 
     #[inline]
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let FlattenProj { mut signal, mut inner } = self.project();
+        let FlattenProj { 
+            mut signal, 
+            mut inner,
+            store_handle: _
+        } = self.project();
 
         let done = match signal.as_mut().as_pin_mut().map(|signal| signal.poll_change(cx)) {
             None => true,

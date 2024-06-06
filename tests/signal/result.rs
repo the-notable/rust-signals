@@ -1,5 +1,7 @@
 use std::task::Poll;
 use rx_store::signal::{SignalExt, Always, result};
+use rx_store::store::RxStore;
+use rx_store::traits::HasStoreHandle;
 use crate::util;
 
 
@@ -15,6 +17,7 @@ fn test_result() {
 
 #[test]
 fn test_result_signal() {
+    let store = RxStore::new();
     let test_value = 0;
 
     let input = match test_value {
@@ -23,7 +26,7 @@ fn test_result_signal() {
             Poll::Pending,
             Poll::Ready(3),
             Poll::Pending,
-        ])),
+        ], store.store_handle().clone())),
         _ => Err("hello"),
     };
 

@@ -241,7 +241,7 @@ impl<A, B, F> SignalMap for MapValue<A, F>
     fn poll_map_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<MapDiff<Self::Key, Self::Value>>> {
         let MapValueProj { signal, callback } = self.project();
 
-        signal.poll_map_change(cx).map(|some| some.map(|change| change.map(|value| callback(value))))
+        signal.poll_map_change(cx).map(|some| some.map(|change| change.map(callback)))
     }
 }
 
@@ -883,8 +883,7 @@ mod mutable_btree_map {
             None
         }
 
-        fn register_effect<F>(&self, f: F)
-                              -> Result<SpawnedFutureKey, &'static str> 
+        fn register_effect<F>(&self, f: F) -> Result<SpawnedFutureKey, &'static str> 
             where 
                 F: Fn(Self::YieldedValue) + Send + 'static 
         {
@@ -1222,10 +1221,33 @@ mod mutable_btree_map {
             use std::time::Duration;
 
             use crate::signal_map::{MapDiff, MutableBTreeMap};
-            use crate::signal_map::observable_btree_map::{handle_map_diff, ObservableBTreeMap, ObserveMap};
+            use crate::signal_map::observable_btree_map::{ObservableBTreeMap, ObserveMap};
             use crate::signal_map::SignalMapExt;
             use crate::store::{Manager, RxStore};
 
+            fn handle_map_diff(diff: MapDiff<i32, i32>, output: MutableBTreeMap<i32, i32>)
+            {
+                match diff {
+                    MapDiff::Replace { entries } => {
+                        let mut lock = output.lock_mut();
+                        entries.iter().for_each(|(k, v)| {
+                            lock.insert(*k, *v * 3);
+                        })
+                    },
+                    MapDiff::Insert { key, value } |
+                    MapDiff::Update { key, value } => {
+                        let mut lock = output.lock_mut();
+                        lock.insert(key, value * 3);
+                    },
+                    MapDiff::Remove { key } => {
+                        let mut lock = output.lock_mut();
+                        //let k = *lock.iter().find(|(_, v)| *v == &key).unwrap().0;
+                        lock.remove(&key);
+                    },
+                    MapDiff::Clear {} => output.lock_mut().clear()
+                }
+            }
+            
             #[test]
             fn it_observes_map_cloned() {
                 let store = RxStore::new();
@@ -1373,28 +1395,7 @@ mod mutable_btree_map {
             }
         }
 
-        fn handle_map_diff(diff: MapDiff<i32, i32>, output: MutableBTreeMap<i32, i32>) 
-        {
-            match diff {
-                MapDiff::Replace { entries } => {
-                    let mut lock = output.lock_mut();
-                    entries.iter().for_each(|(k, v)| {
-                        lock.insert(*k, *v * 3);
-                    })
-                },
-                MapDiff::Insert { key, value } |
-                MapDiff::Update { key, value } => {
-                    let mut lock = output.lock_mut();
-                    lock.insert(key, value * 3);
-                },
-                MapDiff::Remove { key } => {
-                    let mut lock = output.lock_mut();
-                    //let k = *lock.iter().find(|(_, v)| *v == &key).unwrap().0;
-                    lock.remove(&key);
-                },
-                MapDiff::Clear {} => output.lock_mut().clear()
-            }
-        }
+        
 
     }
 }
