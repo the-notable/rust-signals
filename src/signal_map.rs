@@ -11,6 +11,8 @@ use futures_util::stream::StreamExt;
 use pin_project::pin_project;
 
 use crate::signal::{Signal};
+use crate::store::StoreHandle;
+use crate::traits::HasStoreHandle;
 
 pub use self::mutable_btree_map::*;
 
@@ -228,6 +230,13 @@ pub struct MapValue<A, B> {
     #[pin]
     signal: A,
     callback: B,
+    store_handle: StoreHandle
+}
+
+impl<A, B> HasStoreHandle for MapValue<A, B> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
 }
 
 impl<A, B, F> SignalMap for MapValue<A, F>
@@ -239,7 +248,11 @@ impl<A, B, F> SignalMap for MapValue<A, F>
     // TODO should this inline ?
     #[inline]
     fn poll_map_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<MapDiff<Self::Key, Self::Value>>> {
-        let MapValueProj { signal, callback } = self.project();
+        let MapValueProj { 
+            signal, 
+            callback,
+            store_handle: _ 
+        } = self.project();
 
         signal.poll_map_change(cx).map(|some| some.map(|change| change.map(callback)))
     }
@@ -288,6 +301,17 @@ pub struct MapValueSignal<A, B, F> where A: SignalMap, B: Signal {
     signals: BTreeMap<A::Key, Option<Pin<Box<B>>>>,
     pending: VecDeque<MapDiff<A::Key, B::Item>>,
     callback: F,
+    store_handle: StoreHandle
+}
+
+impl<A, B, F> HasStoreHandle for MapValueSignal<A, B, F> 
+    where 
+        A: SignalMap, 
+        B: Signal 
+{
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
 }
 
 impl<A, B, F> SignalMap for MapValueSignal<A, B, F>
@@ -299,7 +323,13 @@ impl<A, B, F> SignalMap for MapValueSignal<A, B, F>
     type Value = B::Item;
 
     fn poll_map_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<MapDiff<Self::Key, Self::Value>>> {
-        let MapValueSignalProj { mut signal, signals, pending, callback } = self.project();
+        let MapValueSignalProj { 
+            mut signal, 
+            signals, 
+            pending, 
+            callback,
+            store_handle: _
+        } = self.project();
 
         if let Some(diff) = pending.pop_front() {
             return Poll::Ready(Some(diff));
@@ -402,6 +432,13 @@ pub struct MapWatchKeySignal<M> where M: SignalMap {
     signal_map: M,
     watch_key: M::Key,
     first: bool,
+    store_handle: StoreHandle
+}
+
+impl<M> HasStoreHandle for MapWatchKeySignal<M> where M: SignalMap {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
 }
 
 impl<M> Signal for MapWatchKeySignal<M>
@@ -411,7 +448,12 @@ impl<M> Signal for MapWatchKeySignal<M>
     type Item = Option<M::Value>;
 
     fn poll_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let MapWatchKeySignalProj { mut signal_map, watch_key, first } = self.project();
+        let MapWatchKeySignalProj { 
+            mut signal_map, 
+            watch_key, 
+            first,
+            store_handle: _
+        } = self.project();
 
         let mut changed: Option<Option<M::Value>> = None;
 
