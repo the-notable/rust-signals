@@ -17,7 +17,7 @@ impl<T: Clone + SSS> Provider for Observable<T> {
         Some(self.spawned_future_key())
     }
 
-    fn register_effect<F>(&self, f: F) -> Result<SpawnedFutureKey, &'static str> 
+    fn register_effect<F>(&self, f: F) -> Result<SpawnedFutureKey, &'static str>
         where 
             F: Fn(Self::YieldedValue) + Send + 'static 
     {
@@ -81,7 +81,7 @@ impl<A: Clone> HasSignal<A> for Observable<A> {
 //         <Self as HasSignal<A>>::Return: Signal + Send + Sync + 'static + Iterator,
 //         A: Clone + Send + Sync + 'static
 // {
-//     fn observe<U, F>(&self, f: F) 
+//     fn observe<U, F>(&self, f: F)
 //         -> Observable<U>
 //         where
 //             U: Default + Send + Sync + 'static,
@@ -94,7 +94,7 @@ impl<A: Clone> HasSignal<A> for Observable<A> {
 //             out_mutable_clone.set(f(v));
 //             async {}
 //         });
-//         
+//
 //         let fut_key = store_handle.spawn_fut(None, fut);
 //         Observable {
 //             store_handle,
@@ -125,7 +125,7 @@ mod tests {
             .observe();
         assert!(observable.fut_key().is_some())
     }
-    
+
     #[test]
     fn it_registers_effect() {
         let store = RxStore::new();

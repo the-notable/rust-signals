@@ -7,6 +7,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Poll, Waker, Context};
 use futures_util::task::{self, ArcWake};
 use crate::signal::ChangedWaker;
+use crate::traits::HasStoreHandle;
+use crate::store::StoreHandle;
 
 
 /// When the Signal changes it will wake up the BroadcasterNotifier, which will
@@ -146,7 +148,7 @@ impl<A> Debug for BroadcasterSharedState<A>
     where A: Debug + Signal,
           A::Item: Debug {
 
-    fn fmt(&self, fmt: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.debug_struct("BroadcasterSharedState")
             .field("inner", &self.inner)
             .field("notifier", &self.notifier)
@@ -204,7 +206,7 @@ impl<A> Debug for BroadcasterState<A>
     where A: Debug + Signal,
           A::Item: Debug {
 
-    fn fmt(&self, fmt: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.debug_struct("BroadcasterState")
             .field("epoch", &self.epoch)
             .field("waker", &self.waker)
@@ -226,15 +228,17 @@ impl<A> Debug for BroadcasterState<A>
 /// If you are using a `Mutable` then you don't need `Broadcaster`, because
 /// `Mutable` already supports the `.signal()`, `.signal_cloned()` and
 /// `.signal_ref()` methods (they are faster than `Broadcaster`).
+#[has_store_handle_macro::has_store_handle]
 pub struct Broadcaster<A> where A: Signal {
     shared_state: Arc<BroadcasterSharedState<A>>,
 }
 
 impl<A> Broadcaster<A> where A: Signal {
     /// Create a new `Broadcaster`
-    pub fn new(signal: A) -> Self {
+    pub(crate) fn new(signal: A, store_handle: StoreHandle) -> Self {
         Self {
             shared_state: Arc::new(BroadcasterSharedState::new(signal)),
+            store_handle
         }
     }
 
@@ -248,32 +252,33 @@ impl<A> Broadcaster<A> where A: Signal {
     }
 }
 
-impl<A> Broadcaster<A> where A: Signal, A::Item: Copy {
+impl<A> Broadcaster<A> where A: Signal {
     /// Returns a new `Signal` which copies values from the input `Signal`
     #[inline]
     pub fn signal(&self) -> BroadcasterSignal<A> {
         BroadcasterSignal {
+            store_handle: self.store_handle().clone(),
             state: BroadcasterState::new(&self.shared_state),
         }
     }
 }
 
-impl<A> Broadcaster<A> where A: Signal, A::Item: Clone {
-    /// Returns a new `Signal` which clones values from the input `Signal`
-    #[inline]
-    pub fn signal_cloned(&self) -> BroadcasterSignalCloned<A> {
-        BroadcasterSignalCloned {
-            state: BroadcasterState::new(&self.shared_state),
-        }
-    }
-}
+// impl<A> Broadcaster<A> where A: Signal, A::Item: Clone {
+//     /// Returns a new `Signal` which clones values from the input `Signal`
+//     #[inline]
+//     pub fn signal_cloned(&self) -> BroadcasterSignalCloned<A> {
+//         BroadcasterSignalCloned {
+//             state: BroadcasterState::new(&self.shared_state),
+//         }
+//     }
+// }
 
 // TODO use derive
 impl<A> Debug for Broadcaster<A>
     where A: Debug + Signal,
           A::Item: Debug {
 
-    fn fmt(&self, fmt: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.debug_struct("Broadcaster")
             .field("shared_state", &self.shared_state)
             .finish()
@@ -285,12 +290,14 @@ impl<A> Clone for Broadcaster<A> where A: Signal {
     fn clone(&self) -> Self {
         Self {
             shared_state: self.shared_state.clone(),
+            store_handle: self.store_handle.clone()
         }
     }
 }
 
 // ---------------------------------------------------------------------------
 
+#[has_store_handle_macro::has_store_handle]
 #[must_use = "Signals do nothing unless polled"]
 pub struct BroadcasterSignal<A> where A: Signal {
     state: BroadcasterState<A>,
@@ -313,7 +320,7 @@ impl<A> Debug for BroadcasterSignal<A>
     where A: Debug + Signal,
           A::Item: Debug {
 
-    fn fmt(&self, fmt: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.debug_struct("BroadcasterSignal")
             .field("state", &self.state)
             .finish()
@@ -344,7 +351,7 @@ impl<A> Debug for BroadcasterSignalCloned<A>
     where A: Debug + Signal,
           A::Item: Debug {
 
-    fn fmt(&self, fmt: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.debug_struct("BroadcasterSignalCloned")
             .field("state", &self.state)
             .finish()
@@ -379,7 +386,7 @@ impl<A, F> Debug for BroadcasterSignalRef<A, F>
     where A: Debug + Signal,
           A::Item: Debug {
 
-    fn fmt(&self, fmt: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.debug_struct("BroadcasterSignalRef")
             .field("state", &self.state)
             .finish()

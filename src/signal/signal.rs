@@ -614,8 +614,9 @@ pub trait SignalExt: Signal {
     ///
     /// See the documentation for [`Broadcaster`] for more details.
     #[inline]
-    fn broadcast(self) -> Broadcaster<Self> where Self: Sized {
-        Broadcaster::new(self)
+    fn broadcast(self) -> Broadcaster<Self> where Self: Sized + HasStoreHandle {
+        let store_handle = self.store_handle().clone();
+        Broadcaster::new(self, store_handle)
     }
 
     /// A convenience for calling `Signal::poll_change` on `Unpin` types.
@@ -870,6 +871,13 @@ pub struct FromStream<A> {
     #[pin]
     stream: Option<A>,
     first: bool,
+    store_handle: StoreHandle
+}
+
+impl<A> HasStoreHandle for FromStream<A> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
 }
 
 impl<A> Signal for FromStream<A> where A: Stream {
@@ -924,12 +932,17 @@ impl<A> Signal for FromStream<A> where A: Stream {
 }
 
 #[inline]
-pub fn from_stream<A>(stream: A) -> FromStream<A> where A: Stream {
-    FromStream { stream: Some(stream), first: true }
+pub fn from_stream<A>(stream: A, store_handle: StoreHandle) -> FromStream<A> where A: Stream {
+    FromStream { 
+        stream: Some(stream), 
+        first: true,
+        store_handle
+    }
 }
 
 
 #[derive(Debug)]
+#[has_store_handle_macro::has_store_handle]
 #[must_use = "Signals do nothing unless polled"]
 pub struct Always<A> {
     value: Option<A>,
@@ -947,9 +960,10 @@ impl<A> Signal for Always<A> {
 }
 
 #[inline]
-pub fn always<A>(value: A) -> Always<A> {
+pub fn always<A>(value: A, store_handle: StoreHandle) -> Always<A> {
     Always {
         value: Some(value),
+        store_handle
     }
 }
 
