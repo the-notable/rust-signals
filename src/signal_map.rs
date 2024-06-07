@@ -107,10 +107,13 @@ pub trait SignalMapExt: SignalMap {
     #[inline]
     fn map_value<A, F>(self, callback: F) -> MapValue<Self, F>
         where F: FnMut(Self::Value) -> A,
-              Self: Sized {
+              Self: Sized + HasStoreHandle 
+    {
+        let store_handle = self.store_handle().clone();
         MapValue {
             signal: self,
             callback,
+            store_handle
         }
     }
 
@@ -118,12 +121,15 @@ pub trait SignalMapExt: SignalMap {
     fn map_value_signal<A, F>(self, callback: F) -> MapValueSignal<Self, A, F>
         where A: Signal,
               F: FnMut(Self::Value) -> A,
-              Self: Sized {
+              Self: Sized + HasStoreHandle 
+    {
+        let store_handle = self.store_handle().clone();
         MapValueSignal {
             signal: Some(self),
             signals: BTreeMap::new(),
             pending: VecDeque::new(),
             callback,
+            store_handle
         }
     }
 
@@ -132,11 +138,14 @@ pub trait SignalMapExt: SignalMap {
     fn key_cloned(self, key: Self::Key) -> MapWatchKeySignal<Self>
         where Self::Key: PartialEq,
               Self::Value: Clone,
-              Self: Sized {
+              Self: Sized + HasStoreHandle 
+    {
+        let store_handle = self.store_handle().clone();
         MapWatchKeySignal {
             signal_map: self,
             watch_key: key,
             first: true,
+            store_handle
         }
     }
 
