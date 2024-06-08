@@ -306,3 +306,27 @@ macro_rules! map_ref {
         $crate::__internal_map!(__internal_value_ref, {}, $($input)*)
     };
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::signal_map::MutableBTreeMap;
+    use crate::store::{Manager, RxStore};
+    use crate::traits::{HasSignal, HasSignalMap};
+
+    fn testt() {
+        let store = RxStore::new();
+        
+        let mut_1 = store.new_mutable(1);
+        let mut_2 = store.new_mutable(2);
+        let mut_3 = store.new_mutable(3);
+        let map: MutableBTreeMap<i32, i32> = store.new_mutable_btree_map();
+        
+        let output = map_ref! {
+            let one = mut_1.signal(),
+            let two = mut_2.signal(),
+            let three = mut_3.signal() => {
+                one + two + three
+            }
+        };
+    }
+}

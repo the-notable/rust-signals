@@ -63,8 +63,6 @@ fn map_value() {
 fn it_maps_value() {
     let store = RxStore::new();
     let map = store.new_mutable_btree_map();
-
-    map.lock_mut().insert(5, "five");
     
     let observable_map = map
         .signal_map()

@@ -60,9 +60,9 @@ pub trait Manager: HasStoreHandle {
         lock.set(Arc::new(v))
     }
 
-    fn get<T: Send + Sync + 'static>(&self) -> Arc<T> {
+    fn get<T: Send + Sync + 'static>(&self) -> Option<Arc<T>> {
         let lock = self.store_handle().get_store();
-        lock.get::<T>().clone()
+        lock.get::<Arc<T>>().cloned()
     }
     
     fn new_mutable<T: 'static>(&self, v: T) -> Mutable<T> {
@@ -237,14 +237,13 @@ impl StoreInner {
     }
 
     fn set<T: Send + Sync + 'static>(&self, v: T) -> bool {
-        self.stored.set(Arc::new(v))
+        self.stored.set(v)
     }
 
-    fn get<T: Send + Sync + 'static>(&self) -> &Arc<T> {
+    fn get<T: Send + Sync + 'static>(&self) -> Option<&T> {
         self
             .stored
-            .try_get()
-            .expect("state: get() called before set() for given type")
+            .try_get::<T>()
     }
 }
 
@@ -292,7 +291,6 @@ impl StoreAccess for StoreHandle {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Deref;
     use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
@@ -335,8 +333,8 @@ mod tests {
         let store = RxStore::new();
         let one_a = TestTypeOne(50);
         assert!(store.set(one_a));
-        let one_b = store.get::<Arc<TestTypeOne>>();
-        assert_eq!(one_a, **one_b)
+        let one_b = store.get::<TestTypeOne>().unwrap();
+        assert_eq!(one_a, *one_b)
     }
 
     #[test]
