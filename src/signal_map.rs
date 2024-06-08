@@ -10,9 +10,10 @@ use futures_util::stream;
 use futures_util::stream::StreamExt;
 use pin_project::pin_project;
 
-use crate::signal::{Signal};
-use crate::store::StoreHandle;
-use crate::traits::HasStoreHandle;
+use crate::signal::Signal;
+use crate::signal_map::observable_btree_map::ObservableBTreeMap;
+use crate::store::{Manager, StoreAccess, StoreHandle};
+use crate::traits::{HasStoreHandle, SSS};
 
 pub use self::mutable_btree_map::*;
 
@@ -101,6 +102,53 @@ impl<A> SignalMap for Pin<A>
     }
 }
 
+pub trait ObserveSignalMap
+    where
+        Self: SignalMap + HasStoreHandle + Sized + SSS,
+        <Self as SignalMap>::Key: Ord + Clone + SSS,
+        <Self as SignalMap>::Value: Clone + SSS
+{
+    fn observe(self) -> ObservableBTreeMap<<Self as SignalMap>::Key, <Self as SignalMap>::Value> {
+        let mut store = self.store_handle().clone();
+        let out = store.new_mutable_btree_map();
+        let out_clone = out.clone();
+        let fut = self.for_each(move |v| {
+            match v {
+                MapDiff::Replace { entries } => {
+                    entries
+                        .into_iter()
+                        .for_each(|(k, v)| { 
+                            out_clone.lock_mut().insert(k, v); 
+                        });
+                }
+                MapDiff::Insert { key, value } |
+                MapDiff::Update { key, value } => {
+                    out_clone.lock_mut().insert(key, value);
+                }
+                MapDiff::Remove { key } => { 
+                    out_clone.lock_mut().remove(&key).unwrap(); 
+                },
+                MapDiff::Clear { } => { 
+                    out_clone.lock_mut().clear(); 
+                }
+            };
+            async {}
+        });
+
+        let fut_key = store.spawn_fut(None, fut);
+        ObservableBTreeMap {
+            store_handle: store,
+            map: out,
+            fut_key
+        }
+    }
+}
+
+impl<T> ObserveSignalMap for T
+    where
+        Self: SignalMap + HasStoreHandle + Sized + SSS,
+        <Self as SignalMap>::Key: Ord + Clone + SSS,
+        <Self as SignalMap>::Value: Clone + SSS {}
 
 // TODO Seal this
 pub trait SignalMapExt: SignalMap {
@@ -583,6 +631,7 @@ mod mutable_btree_map {
     use super::{MapDiff, SignalMap, SignalMapExt};
 
     #[derive(Debug)]
+    #[has_store_handle_macro::has_store_handle]
     struct MutableBTreeState<K, V> {
         values: BTreeMap<K, V>,
         senders: Vec<mpsc::UnboundedSender<MapDiff<K, V>>>,
@@ -694,7 +743,8 @@ mod mutable_btree_map {
             self.senders.push(sender);
 
             MutableSignalMap {
-                receiver
+                receiver,
+                store_handle: self.store_handle().clone()
             }
         }
     }
@@ -837,18 +887,6 @@ mod mutable_btree_map {
 
     impl<'a, K, V> MutableBTreeMapLockMut<'a, K, V> where K: Ord + Clone, V: Clone {
         #[inline]
-        pub fn replace_cloned(&mut self, values: BTreeMap<K, V>) {
-            self.lock.replace(values)
-        }
-
-        #[inline]
-        pub fn insert_cloned(&mut self, key: K, value: V) -> Option<V> {
-            self.lock.insert(key, value)
-        }
-    }
-
-    impl<'a, K, V> MutableBTreeMapLockMut<'a, K, V> where K: Ord + Copy, V: Copy {
-        #[inline]
         pub fn replace(&mut self, values: BTreeMap<K, V>) {
             self.lock.replace(values)
         }
@@ -858,6 +896,18 @@ mod mutable_btree_map {
             self.lock.insert(key, value)
         }
     }
+
+    // impl<'a, K, V> MutableBTreeMapLockMut<'a, K, V> where K: Ord + Copy, V: Copy {
+    //     #[inline]
+    //     pub fn replace(&mut self, values: BTreeMap<K, V>) {
+    //         self.lock.replace(values)
+    //     }
+    // 
+    //     #[inline]
+    //     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+    //         self.lock.insert(key, value)
+    //     }
+    // }
 
 
     // TODO get rid of the Arc
@@ -902,6 +952,7 @@ mod mutable_btree_map {
             let state = Arc::new(RwLock::new(MutableBTreeState {
                 values: values.into(),
                 senders: vec![],
+                store_handle: store_handle.clone()
             }));
             Self {
                 store_handle,
@@ -1041,6 +1092,7 @@ mod mutable_btree_map {
     }
 
     #[derive(Debug)]
+    #[has_store_handle_macro::has_store_handle]
     #[must_use = "SignalMaps do nothing unless polled"]
     pub struct MutableSignalMap<K, V> {
         receiver: mpsc::UnboundedReceiver<MapDiff<K, V>>,
@@ -1166,9 +1218,9 @@ mod mutable_btree_map {
 
         #[derive(Debug)]
         pub struct ObservableBTreeMap<K, V> {
-            store_handle: StoreHandle,
-            map: MutableBTreeMap<K, V>,
-            fut_key: SpawnedFutureKey
+            pub(crate) store_handle: StoreHandle,
+            pub(crate) map: MutableBTreeMap<K, V>,
+            pub(crate) fut_key: SpawnedFutureKey
         }
 
         impl<K, V> HasStoreHandle for ObservableBTreeMap<K, V> {
@@ -1305,8 +1357,8 @@ mod mutable_btree_map {
                 let map = store.new_mutable_btree_map();
                 {
                     let mut lock = map.lock_mut();
-                    lock.insert_cloned("one".to_owned(), 1);
-                    lock.insert_cloned("two".to_owned(), 2);
+                    lock.insert("one".to_owned(), 1);
+                    lock.insert("two".to_owned(), 2);
                 }
                 let obsv_map: ObservableBTreeMap<i32, String> = map.observe_map(|input, output: MutableBTreeMap<i32, String>| {
                     input.for_each(move |diff| {
@@ -1314,13 +1366,13 @@ mod mutable_btree_map {
                             MapDiff::Replace { entries } => {
                                 let mut lock = output.lock_mut();
                                 entries.iter().for_each(|(k, v)| {
-                                    lock.insert_cloned(*v, k.clone());
+                                    lock.insert(*v, k.clone());
                                 })
                             }
                             MapDiff::Insert { key, value } |
                             MapDiff::Update { key, value } => {
                                 let mut lock = output.lock_mut();
-                                lock.insert_cloned(value, key);
+                                lock.insert(value, key);
                             }
                             MapDiff::Remove { key } => {
                                 let mut lock = output.lock_mut();
@@ -1335,8 +1387,8 @@ mod mutable_btree_map {
 
                 {
                     let mut lock = map.lock_mut();
-                    lock.insert_cloned("three".to_owned(), 3);
-                    lock.insert_cloned("four".to_owned(), 4);
+                    lock.insert("three".to_owned(), 3);
+                    lock.insert("four".to_owned(), 4);
                 }
                 thread::sleep(Duration::from_millis(500));
 
@@ -1435,12 +1487,12 @@ mod mutable_btree_map {
 
                 thread::sleep(Duration::from_millis(500));
 
-                obsv_map_two.lock_ref().iter().for_each(|(k, v)| {
-                    println!("k: {}, v: {}", k, v);
-                });
-
-                println!("{:?}", obsv_map_one);
-                println!("{:?}", obsv_map_two);
+                // obsv_map_two.lock_ref().iter().for_each(|(k, v)| {
+                //     println!("k: {}, v: {}", k, v);
+                // });
+                // 
+                // println!("{:?}", obsv_map_one);
+                // println!("{:?}", obsv_map_two);
 
                 assert_eq!(obsv_map_two.lock_ref().get(&2).unwrap(), &18);
             }

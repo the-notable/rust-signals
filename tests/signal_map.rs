@@ -1,8 +1,10 @@
 use std::task::Poll;
+use std::thread;
+use std::time::Duration;
 
-use rx_store::signal_map::{self, MapDiff, SignalMapExt};
-use rx_store::store::RxStore;
-use rx_store::traits::HasStoreHandle;
+use rx_store::signal_map::{self, MapDiff, ObserveSignalMap, SignalMapExt};
+use rx_store::store::{Manager, RxStore};
+use rx_store::traits::{HasSignalMap, HasStoreHandle};
 
 mod util;
 
@@ -55,6 +57,25 @@ fn map_value() {
         Poll::Ready(Some(MapDiff::Clear {})),
         Poll::Ready(None),
     ]);
+}
+
+#[test]
+fn it_maps_value() {
+    let store = RxStore::new();
+    let map = store.new_mutable_btree_map();
+
+    map.lock_mut().insert(5, "five");
+    
+    let observable_map = map
+        .signal_map()
+        .map_value(|v| format!("hello: {}", v))
+        .observe();
+    
+    map.lock_mut().insert(1, "one");
+    thread::sleep(Duration::from_millis(500));  
+    
+    let lock = observable_map.lock_ref();
+    assert_eq!(lock.get(&1).unwrap(), "hello: one")
 }
 
 // #[test]

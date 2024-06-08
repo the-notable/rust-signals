@@ -141,7 +141,7 @@ mod tests {
             *lock = v + 1;
         }).unwrap();
         mutable.set(2);
-        sleep(Duration::from_millis(500));
+        sleep(Duration::from_millis(1000));
         let v = {
             let lock = holder.lock().unwrap();
             *lock

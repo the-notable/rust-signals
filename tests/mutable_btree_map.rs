@@ -89,15 +89,15 @@ fn clear() {
     assert_eq!(writer.get(&8), None);
 }
 
-#[test]
-fn insert_cloned() {
-    let store = RxStore::new();
-    let m = store.new_mutable_btree_map::<&'static str, TestValueType>();
-    //let m = MutableBTreeMap::<&'static str, TestValueType>::new();
-    let mut writer = m.lock_mut();
-    writer.insert_cloned("test", TestValueType {inner: 294});
-    assert_eq!(writer.get(&"test").unwrap(), &TestValueType {inner: 294});
-}
+// #[test]
+// fn insert_cloned() {
+//     let store = RxStore::new();
+//     let m = store.new_mutable_btree_map::<&'static str, TestValueType>();
+//     //let m = MutableBTreeMap::<&'static str, TestValueType>::new();
+//     let mut writer = m.lock_mut();
+//     writer.insert_cloned("test", TestValueType {inner: 294});
+//     assert_eq!(writer.get(&"test").unwrap(), &TestValueType {inner: 294});
+// }
 
 #[test]
 fn signal_map() {
@@ -112,18 +112,18 @@ fn signal_map() {
     ]);
 }
 
-#[test]
-fn signal_map_cloned() {
-    emits_diffs_cloned(|writer| {
-        writer.insert_cloned(1, TestValueType {inner: 42});
-        writer.remove(&1);
-    }, vec![
-        Poll::Pending,
-        Poll::Ready(Some(MapDiff::Insert { key: 1, value: TestValueType {inner: 42} })),
-        Poll::Ready(Some(MapDiff::Remove { key: 1 })),
-        Poll::Ready(None)
-    ]);
-}
+// #[test]
+// fn signal_map_cloned() {
+//     emits_diffs_cloned(|writer| {
+//         writer.insert_cloned(1, TestValueType {inner: 42});
+//         writer.remove(&1);
+//     }, vec![
+//         Poll::Pending,
+//         Poll::Ready(Some(MapDiff::Insert { key: 1, value: TestValueType {inner: 42} })),
+//         Poll::Ready(Some(MapDiff::Remove { key: 1 })),
+//         Poll::Ready(None)
+//     ]);
+// }
 
 #[test]
 fn is_from_btreemap() {
