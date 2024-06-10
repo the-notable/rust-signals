@@ -11,7 +11,7 @@ use tokio::runtime::{Builder as TokioBuilder, Handle, Runtime};
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 
-use crate::signal::Mutable;
+use crate::signal::{ComposableBuilder, Mutable};
 use crate::signal_map::MutableBTreeMap;
 use crate::signal_vec::MutableVec;
 use crate::traits::HasStoreHandle;
@@ -63,6 +63,10 @@ pub trait Manager: HasStoreHandle {
     fn get<T: Send + Sync + 'static>(&self) -> Option<Arc<T>> {
         let lock = self.store_handle().get_store();
         lock.get::<Arc<T>>().cloned()
+    }
+    
+    fn new_composable<T: Default>(&self) -> ComposableBuilder<T> {
+        ComposableBuilder::new(self.store_handle().clone())
     }
     
     fn new_mutable<T: 'static>(&self, v: T) -> Mutable<T> {

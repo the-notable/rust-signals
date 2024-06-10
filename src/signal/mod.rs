@@ -13,4 +13,7 @@ mod mutable;
 pub use self::mutable::*;
 
 mod signal;
+mod composable;
+pub use self::composable::*;
+
 pub use self::signal::*;

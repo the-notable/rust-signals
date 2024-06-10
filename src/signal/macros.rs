@@ -311,7 +311,7 @@ macro_rules! map_ref {
 mod tests {
     use crate::signal_map::MutableBTreeMap;
     use crate::store::{Manager, RxStore};
-    use crate::traits::{HasSignal, HasSignalMap};
+    use crate::traits::HasSignal;
 
     fn testt() {
         let store = RxStore::new();
