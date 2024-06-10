@@ -8,6 +8,7 @@ pub fn has_store_handle(_args: TokenStream, input: TokenStream) -> TokenStream {
     
     let ast: ItemStruct = syn::parse(input).unwrap();
 
+    let attrs = &ast.attrs;
     let vis = &ast.vis.to_token_stream();
     let name = &ast.ident.to_token_stream();
     let (
@@ -29,6 +30,7 @@ pub fn has_store_handle(_args: TokenStream, input: TokenStream) -> TokenStream {
 
     // Build the output, possibly using quasi-quotation
     let expanded = quote! {
+        #(#attrs)*
         #vis struct #name #impl_generics #where_clause {
             #(#fields),*,
             store_handle: StoreHandle

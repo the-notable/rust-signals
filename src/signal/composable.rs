@@ -5,8 +5,8 @@ use crate::store::{SpawnedFutureKey, StoreAccess};
 use crate::traits::HasStoreHandle;
 use crate::store::StoreHandle;
 
-#[derive(Debug)]
 #[has_store_handle]
+#[derive(Debug)]
 pub struct ComposableBuilder<A> {
     inner: Mutable<A>,
     fut_keys: Vec<SpawnedFutureKey>
@@ -42,8 +42,8 @@ impl<A: Default> ComposableBuilder<A> {
     }
 }
 
-#[derive(Debug)]
 #[has_store_handle]
+#[derive(Debug)]
 pub struct Composable<A> {
     inner: Mutable<A>,
     fut_keys: Vec<SpawnedFutureKey>
