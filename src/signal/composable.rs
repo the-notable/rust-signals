@@ -1,8 +1,8 @@
 use std::future::Future;
 use has_store_handle_macro::has_store_handle;
-use crate::signal::Mutable;
+use crate::signal::{Mutable, MutableSignal};
 use crate::store::{SpawnedFutureKey, StoreAccess};
-use crate::traits::HasStoreHandle;
+use crate::traits::{HasSignal, HasStoreHandle};
 use crate::store::StoreHandle;
 
 #[has_store_handle]
@@ -49,3 +49,10 @@ pub struct Composable<A> {
     fut_keys: Vec<SpawnedFutureKey>
 }
 
+impl<A: Clone> HasSignal<A> for Composable<A> {
+    type Return = MutableSignal<A>;
+
+    fn signal(&self) -> Self::Return {
+        self.inner.signal()
+    }
+}
