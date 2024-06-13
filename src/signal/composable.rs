@@ -2,7 +2,7 @@ use std::future::Future;
 use has_store_handle_macro::has_store_handle;
 use crate::signal::{Mutable, MutableLockRef, MutableSignal};
 use crate::store::{SpawnedFutureKey, StoreAccess};
-use crate::traits::{Get, HasSignal, HasStoreHandle};
+use crate::traits::{Get, HasSignal, HasStoreHandle, Provider};
 use crate::store::StoreHandle;
 
 #[has_store_handle]
@@ -47,6 +47,10 @@ impl<A: Default> ComposableBuilder<A> {
 pub struct Composable<A> {
     inner: Mutable<A>,
     fut_keys: Vec<SpawnedFutureKey>
+}
+
+impl<A> Provider for Composable<A> {
+    
 }
 
 impl<A> Composable<A> {
