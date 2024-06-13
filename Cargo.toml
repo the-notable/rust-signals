@@ -30,6 +30,7 @@ state = "0.6.0"
 tokio-util = "0.7.11"
 tokio = { version = "1.37.0", features = ["macros", "rt", "time", "rt-multi-thread"] }
 has-store-handle-macro = { path = "proc_macros/has-store-handle-macro" }
+vec1 = "1.12.1"
 
 [dependencies.log]
 version = "0.4.14"

@@ -9,7 +9,9 @@ use slotmap::{new_key_type, SlotMap};
 use state::TypeMap;
 use tokio::runtime::{Builder as TokioBuilder, Handle, Runtime};
 use tokio::select;
+use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
+use vec1::Vec1;
 
 use crate::signal::{ComposableBuilder, Mutable};
 use crate::signal_map::MutableBTreeMap;
@@ -23,37 +25,6 @@ new_key_type! {
 pub(crate) type StorePtr = Arc<Mutex<StoreInner>>;
 pub(crate) type StoreArcMutexGuard = ArcMutexGuard<RawMutex, StoreInner>;
 
-// #[derive(Debug)]
-// pub struct Builder;
-// 
-// impl Builder {
-//     
-// }
-// 
-// #[derive(Debug)]
-// pub struct MutableBuilder;
-// 
-// #[derive(Debug)]
-// pub struct MutableBTreeMapBuilder<T> {
-//     store_handle: StoreHandle,
-//     values: Option<T>
-// }
-// 
-// impl<T> MutableBTreeMapBuilder<T> {
-//     pub fn with_values<K, V>(mut self, values: T) -> Self {
-//         self.values = Some(values);
-//         self
-//     }
-//     
-//     pub fn build<K: Ord, V>(self) -> MutableBTreeMap<K, V> where BTreeMap<K, V>: From<T> {
-//         if let Some(v) = self.values {
-//             MutableBTreeMap::new_with_values(v, self.store_handle)
-//         } else {
-//             MutableBTreeMap::new(self.store_handle)
-//         }
-//     }
-// }
-
 pub trait Manager: HasStoreHandle {
     fn set<T: Send + Sync + 'static>(&self, v: T) -> bool {
         let lock = self.store_handle().get_store();
@@ -65,8 +36,12 @@ pub trait Manager: HasStoreHandle {
         lock.get::<Arc<T>>().cloned()
     }
     
-    fn new_composable<T: Default>(&self) -> ComposableBuilder<T> {
-        ComposableBuilder::new(self.store_handle().clone())
+    fn new_composable_with<T: Default, F, O>(&self, f: F) -> ComposableBuilder<T>
+        where
+            F: Fn(Mutable<T>) -> O,
+            O: Future<Output=()> + Send + 'static
+    {
+        ComposableBuilder::new_with(self.store_handle().clone(), f)
     }
     
     fn new_mutable<T: 'static>(&self, v: T) -> Mutable<T> {
@@ -155,8 +130,12 @@ pub(crate) trait StoreAccess {
         inner.try_lock_arc_for(duration)
     }
     
-    fn spawn_fut<F>(&mut self, provider_key: Option<SpawnedFutureKey>, f: F)
-                               -> SpawnedFutureKey
+    fn spawn_fut<F>(
+        &mut self, 
+        provider_key: Option<SpawnedFutureKey>, 
+        f: F
+    ) 
+        -> SpawnedFutureKey
         where
             F: Future<Output = ()> + Send + 'static
     {
@@ -177,6 +156,85 @@ pub(crate) trait StoreAccess {
 
         lock.spawned_futs.insert(token)
     }
+
+    /// This method returns a token which will be canceled
+    /// whenever any one of the cancellation tokens associated with
+    /// the provided keys is cancelled.
+    /// 
+    /// If an empty Vec of keys is provided this method will still 
+    /// return a 
+    fn derive_dependent_cancellation_token(
+        &mut self, 
+        provider_keys: Vec1<SpawnedFutureKey>
+    ) -> SpawnedFutureKey 
+    {
+        let token = CancellationToken::new();
+        let mut lock = self.get_store();
+        let tokens: Vec<CancellationToken> = provider_keys
+            .iter()
+            .map(|key| {
+                lock.spawned_futs.get(*key).unwrap().child_token()
+            })
+            .collect();
+
+        let mut set = JoinSet::new();
+        tokens
+            .into_iter()
+            .for_each(|v| {
+                set.spawn_on(v.cancelled_owned(), self.rt());
+            });
+
+        let cloned_token = token.clone();
+        self.rt().spawn(async move {
+            let _ = set.join_next().await;
+            cloned_token.cancel()
+        });
+
+        lock.spawned_futs.insert(token)
+    }
+    
+    // fn spawn_futs<F>(&mut self, provider_keys: Vec<SpawnedFutureKey>, f: F)
+    //                 -> SpawnedFutureKey
+    //     where
+    //         F: Future<Output = ()> + Send + 'static
+    // {
+    //     let token = CancellationToken::new();
+    //     if !provider_keys.is_empty() {
+    //         // makes new token dependent on cancellation of 
+    //         // "parent" futures
+    //         let lock = self.get_store();
+    //         let tokens: Vec<CancellationToken> = provider_keys
+    //             .iter()
+    //             .map(|key| {
+    //                 lock.spawned_futs.get(*key).unwrap().child_token()
+    //             })
+    //             .collect();
+    // 
+    //         let mut set = JoinSet::new();
+    //         tokens
+    //             .into_iter()
+    //             .for_each(|v| { 
+    //                 set.spawn_on(v.cancelled_owned(), self.rt()); 
+    //             });
+    // 
+    //         let cloned_token = token.clone();
+    //         self.rt().spawn(async move {
+    //             let _ = set.join_next().await;
+    //             cloned_token.cancel()
+    //         });
+    //     }
+    //     
+    //     let cloned_token = token.clone();
+    //     self.rt().spawn(async move {
+    //         select! {
+    //             _ = cloned_token.cancelled() => {}
+    //             _ = f => {}
+    //         }
+    //     });
+    // 
+    //     let mut lock = self.get_store();
+    //     lock.spawned_futs.insert(token)
+    // }
 }
 
 #[derive(Debug)]
@@ -295,9 +353,9 @@ impl StoreAccess for StoreHandle {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
+    use vec1::vec1;
 
     use crate::signal::{ObserveSignal, SignalExt};
     use crate::store::{Manager, RxStore, StoreAccess};
@@ -452,226 +510,32 @@ mod tests {
         thread::sleep(Duration::from_millis(500));
         assert_eq!(observable_two.get_cloned(), "hello there, general kenobi, nice to see you".to_string())
     }
-}
+    
+    #[test]
+    fn it_combines_cancellation_tokens() {
+        let mut store = RxStore::new();
+        
+        let key_1_1 = store.spawn_fut(None, async {});
+        
+        let key_2_1= store.spawn_fut(None, async {});
+        let key_2_2_dep_on_1_1 = store.spawn_fut(Some(key_1_1), async {});
+        let key_2_3 = store.spawn_fut(None, async {});
+        
+        let keys = vec1![key_2_1, key_2_2_dep_on_1_1, key_2_3];
+        let joined_key = store.derive_dependent_cancellation_token(keys);
+        
+        let store_lock = store.store.lock();
+        let joined_token = store_lock.spawned_futs.get(joined_key).unwrap();
+        assert!(!joined_token.is_cancelled());
+        
+        let key_1_1_token = store_lock.spawned_futs.get(key_1_1).unwrap();
+        key_1_1_token.cancel();
+        
+        thread::sleep(Duration::from_millis(500));
+        assert!(key_1_1_token.is_cancelled());
+        assert!(joined_token.is_cancelled());
 
-// /// Controls access to internal store by controlling
-// /// access to mutex lock
-// #[derive(Debug)]
-// pub struct RxStoreManager(StorePtr);
-// 
-// impl RxStoreManager {
-// 
-//     pub fn new() -> Self {
-//         Self(Arc::new(Mutex::new(RxStore::new())))
-//     }
-// 
-//     /// Attempts to acquire a lock through an `Arc`.
-//     ///
-//     /// This function will block the local thread until it is available to acquire
-//     /// the mutex. Upon returning, the thread is the only thread with the mutex
-//     /// held. An RAII guard is returned to allow scoped unlock of the lock. When
-//     /// the guard goes out of scope, the mutex will be unlocked.
-//     ///
-//     /// This method requires the `Mutex` to be inside of an `Arc` and the resulting
-//     /// mutex guard has no lifetime requirements.
-//     ///
-//     /// Returned ArcMutexGuard needs to be dropped when done with.
-//     /// Don't go passing it around causing deadlocks and such.
-//     pub fn get_store(&self) -> StoreArcMutexGuard {
-//         let inner = &self.0;
-//         inner.lock_arc()
-//     }
-// 
-//     pub(crate) fn get_store_ptr(&self) -> StorePtr {
-//         self.0.clone()
-//     }
-// 
-//     /// Attempts to acquire a lock through an `Arc`.
-//     ///
-//     /// If the lock could not be acquired at this time, then `None` is returned.
-//     /// Otherwise, an RAII guard is returned. The lock will be unlocked when the
-//     /// guard is dropped.
-//     ///
-//     /// This method requires the `Mutex` to be inside of an
-//     /// `Arc` and the resulting mutex guard has no lifetime requirements.
-//     ///
-//     /// This function does not block.
-//     pub fn try_get_store(&self) -> Option<StoreArcMutexGuard> {
-//         let inner = &self.0;
-//         inner.try_lock_arc()
-//     }
-// 
-//     /// Attempts to acquire this lock through an `Arc` until a timeout is reached.
-//     ///
-//     /// If the lock could not be acquired before the timeout expired, then
-//     /// `None` is returned. Otherwise, an RAII guard is returned. The lock will
-//     /// be unlocked when the guard is dropped.
-//     ///
-//     /// This method requires the `Mutex` to be inside of an
-//     /// `Arc` and the resulting mutex guard has no lifetime requirements.
-//     ///
-//     /// Returned ArcMutexGuard needs to be dropped when done with.
-//     /// Don't go passing it around causing deadlocks and such.
-//     pub fn try_get_store_timeout(&self, duration: Duration) -> Option<StoreArcMutexGuard> {
-//         let inner = &self.0;
-//         inner.try_lock_arc_for(duration)
-//     }
-// 
-//     pub fn get_child_cancellation_token<S>(&self, source: &S) -> Result<CancellationToken, &'static str>
-//         where S: HasSpawnedFutureKey 
-//     {
-//         let lock = self.get_store();
-//         let key = lock.spawned_futs
-//             .get(source.spawned_future_key())
-//             .ok_or("No associated token found for source")?;
-//         Ok(key.child_token())    
-//     }
-// 
-//     pub fn register_effect<T, S, F>(&self, source: &S, f: F) -> Result<SpawnedFutureKey, &'static str>
-//         where 
-//             T: Copy,
-//             S: HasSpawnedFutureKey + HasSignal<T> + Clone,
-//             <S as HasSignal<T>>::Return: Signal + Send + 'static,
-//             F: Fn(<<S as HasSignal<T>>::Return as Signal>::Item) + Send + 'static
-//     {
-//         let source_cloned = source.clone();
-//         let fut = source_cloned.signal().for_each(move |v| {
-//             f(v);
-//             async {}
-//         });
-// 
-//         let mut lock = self.get_store();
-//         let key = lock.spawn_fut(Some(source.spawned_future_key()), fut);
-//         Ok(key)
-//     }
-//     
-//     // pub fn create_mutable<T: 'static>(&self, v: T) -> Mutable<T> {
-//     //     Mutable::new(v)
-//     // }
-// 
-//     // pub fn derive_observable<U, A, S, F>(
-//     //     &self,
-//     //     source: &S,
-//     //     f: F
-//     // ) -> Observable<U>
-//     //     where
-//     //         A: Copy + Send + Sync + 'static,
-//     //         U: Default + Send + Sync + 'static,
-//     //         S: Clone + HasSignal<A> + Send + Sync + 'static,
-//     //         <S as HasSignal<A>>::Return: crate::signal::Signal + Send + Sync + 'static,
-//     //         F: Fn(<<S as HasSignal<A>>::Return as crate::signal::Signal>::Item) -> U + Send + Sync + 'static
-//     // {
-//     //     let out = self.create_mutable(U::default());
-//     //     let out_mutable_clone = out.clone();
-//     //     let fut = source.signal().for_each(move |v| {
-//     //         out_mutable_clone.set(f(v));
-//     //         async {  }
-//     //     });
-//     // 
-//     //     let mut lock = self.get_store();
-//     //     let fut_key = lock.spawn_fut(None, fut);
-//     //     Observable {
-//     //         mutable: out,
-//     //         fut_key
-//     //     }
-//     // }
-// 
-//     // pub fn derive_observable_cloned<U, A, S, F>(
-//     //     &self,
-//     //     source: &S,
-//     //     f: F
-//     // ) -> Observable<U>
-//     //     where
-//     //         A: Clone + SSS,
-//     //         U: Default + SSS,
-//     //         S: Clone + HasSignalCloned<A> + SSS,
-//     //         <S as HasSignalCloned<A>>::Return: crate::signal::Signal + SSS,
-//     //         F: Fn(<<S as HasSignalCloned<A>>::Return as crate::signal::Signal>::Item) -> U + SSS
-//     // {
-//     //     let out = self.create_mutable(U::default());
-//     //     let out_mutable_clone = out.clone();
-//     //     let fut = source.signal_cloned().for_each(move |v| {
-//     //         out_mutable_clone.set(f(v));
-//     //         async {  }
-//     //     });
-//     // 
-//     //     let mut lock = self.get_store();
-//     //     let fut_key = lock.spawn_fut(None, fut);
-//     //     Observable {
-//     //         mutable: out,
-//     //         fut_key
-//     //     }
-//     // }
-// }
-// 
-// // pub enum ValueState<T> {
-// //     Active(T),
-// //     Cancelled(T)
-// // }
-// 
-// #[derive(Debug)]
-// pub struct RxStore {
-//     rt: Runtime,
-//     stored: TypeMap![Send + Sync],
-//     spawned_futs: SlotMap<SpawnedFutureKey, CancellationToken>
-// }
-// 
-// impl RxStore {
-// 
-//     fn new() -> Self {
-//         let rt = Builder::new_multi_thread()
-//             .build()
-//             .unwrap();
-//         Self {
-//             rt,
-//             stored: <TypeMap![Send + Sync]>::new(),
-//             spawned_futs: SlotMap::default()
-//         }
-//     }
-// 
-//     // pub(crate) fn create_mutable<T: 'static>(&self, v: T) -> Mutable<T> {
-//     //     Mutable::new(v)
-//     // }
-// 
-//     pub fn set<T: Send + Sync + 'static>(&self, v: T) -> bool {
-//         self.stored.set(Arc::new(v))
-//     }
-// 
-//     // pub fn set_node<T, U>(&self, v: T) -> bool where T: Send + Sync + Into<NodeType<U>> + 'static {
-//     //     self.stored.set(v)
-//     // }
-// 
-//     pub fn get<T: Send + Sync + 'static>(&self) -> &Arc<T> {
-//         self
-//             .stored
-//             .try_get()
-//             .expect("state: get() called before set() for given type")
-//     }
-// 
-//     pub(crate) fn spawn_fut<F>(&mut self, provider_key: Option<SpawnedFutureKey>, f: F)
-//                                -> SpawnedFutureKey
-//         where
-//             F: Future<Output = ()> + Send + 'static
-//     {
-//         let token = if let Some(p) = provider_key {
-//             self.spawned_futs.get(p).unwrap().child_token()
-//         } else {
-//             CancellationToken::new()
-//         };
-// 
-//         let cloned_token = token.clone();
-//         let h = self.rt.spawn(async move {
-//             select! {
-//                 _ = cloned_token.cancelled() => {}
-//                 _ = f => {}
-//             }
-//         });
-// 
-//         self.spawned_futs.insert(token)
-//     }
-// 
-//     pub(crate) fn clean_up(&mut self, s: SpawnedFutureKey) {
-//         if let Some(v) = self.spawned_futs.get(s) { v.cancel() }
-//         self.spawned_futs.remove(s);
-//     }
-// }
+        let key_2_1_token = store_lock.spawned_futs.get(key_2_1).unwrap();
+        assert!(!key_2_1_token.is_cancelled());
+    }
+}
