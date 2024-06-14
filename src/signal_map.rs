@@ -54,6 +54,33 @@ impl<K, A> MapDiff<K, A> {
             MapDiff::Clear {} => MapDiff::Clear {},
         }
     }
+
+    fn map_key_value<B, F>(self, mut callback: F) -> MapDiff<K, B> where F: FnMut((&K, A)) -> B {
+        match self {
+            // TODO figure out a more efficient way of implementing this
+            MapDiff::Replace { entries } => { 
+                MapDiff::Replace { 
+                    entries: entries
+                        .into_iter()
+                        .map(|(k, v)| {
+                            let v = callback((&k, v));
+                            (k, v) 
+                        })
+                        .collect() 
+                } 
+            },
+            MapDiff::Insert { key, value } => { 
+                let value = callback((&key, value));
+                MapDiff::Insert { key, value } 
+            },
+            MapDiff::Update { key, value } => {
+                let value = callback((&key, value));
+                MapDiff::Update { key, value } 
+            },
+            MapDiff::Remove { key } => MapDiff::Remove { key },
+            MapDiff::Clear {} => MapDiff::Clear {},
+        }
+    }
 }
 
 
@@ -279,6 +306,44 @@ pub fn always<A, K, V>(map: A) -> Always<A> where A: IntoIterator<Item = (K, V)>
     }
 }
 
+#[pin_project(project = MapKeyValueProj)]
+#[derive(Debug)]
+#[must_use = "SignalMaps do nothing unless polled"]
+pub struct MapKeyValue<A, B> {
+    #[pin]
+    signal: A,
+    callback: B,
+    store_handle: StoreHandle
+}
+
+impl<A, B> HasStoreHandle for MapKeyValue<A, B> {
+    fn store_handle(&self) -> &StoreHandle {
+        &self.store_handle
+    }
+}
+
+impl<A, B, F> SignalMap for MapKeyValue<A, F>
+    where A: SignalMap,
+          F: FnMut((&A::Key, A::Value)) -> B {
+    type Key = A::Key;
+    type Value = B;
+
+    // TODO should this inline ?
+    #[inline]
+    fn poll_map_change(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<MapDiff<Self::Key, Self::Value>>> {
+        let MapKeyValueProj {
+            signal,
+            callback,
+            store_handle: _
+        } = self.project();
+
+        signal
+            .poll_map_change(cx)
+            .map(|some| {
+                some.map(|change| change.map_key_value(callback))
+            })
+    }
+}
 
 #[pin_project(project = MapValueProj)]
 #[derive(Debug)]
@@ -311,7 +376,11 @@ impl<A, B, F> SignalMap for MapValue<A, F>
             store_handle: _ 
         } = self.project();
 
-        signal.poll_map_change(cx).map(|some| some.map(|change| change.map(callback)))
+        signal
+            .poll_map_change(cx)
+            .map(|some| { 
+                some.map(|change| change.map(callback)) 
+            })
     }
 }
 
