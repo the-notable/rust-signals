@@ -13,7 +13,7 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use vec1::Vec1;
 
-use crate::signal::{ComposableBuilder, Mutable};
+use crate::signal::{ComposableBuilder, ComposableMapBuilder, Mutable};
 use crate::signal_map::MutableBTreeMap;
 use crate::signal_vec::MutableVec;
 use crate::traits::HasStoreHandle;
@@ -42,6 +42,16 @@ pub trait Manager: HasStoreHandle {
             O: Future<Output=()> + Send + 'static
     {
         ComposableBuilder::new_with(self.store_handle().clone(), f)
+    }
+
+    fn new_composable_map_with<K, V, F, O>(&self, f: F) -> ComposableMapBuilder<K, V>
+        where
+            K: Ord + Clone,
+            V: Clone,
+            F: Fn(MutableBTreeMap<K, V>) -> O,
+            O: Future<Output=()> + Send + 'static
+    {
+        ComposableMapBuilder::new_with(self.store_handle().clone(), f)
     }
     
     fn new_mutable<T: 'static>(&self, v: T) -> Mutable<T> {
